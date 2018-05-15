@@ -3,7 +3,7 @@
 #include <tchar.h>
 #include <Windows.h>
 
-#include "NTService.h"
+#include "NtService.h"
 
 typedef struct
 {
@@ -24,25 +24,25 @@ typedef struct
 	LPVOID lpvalue;
 
 	// Callbacks for various service control events
-	NTService_OnServiceCreated OnServiceCreated;
-	NTService_OnServiceDeleted OnServiceDeleted;
-	NTService_OnServiceStart OnServiceStart;
-	NTService_OnServiceStop OnServiceStop;
-	NTService_OnServicePause OnServicePause;
-	NTService_OnServiceContinue OnServiceContinue;
-	NTService_OnServiceShutdown OnServiceShutdown;
-	NTService_OnDeviceEvent OnDeviceEvent;
-	NTService_OnHardwareProfileChange OnHardwareProfileChange;
-	NTService_OnPowerEvent OnPowerEvent;
-	NTService_OnSessionChange OnSessionChange;
-	NTService_OnTimeChange OnTimeChange;
-	NTService_OnTriggerEvent OnTriggerEvent;
+	NtService_OnServiceCreated OnServiceCreated;
+	NtService_OnServiceDeleted OnServiceDeleted;
+	NtService_OnServiceStart OnServiceStart;
+	NtService_OnServiceStop OnServiceStop;
+	NtService_OnServicePause OnServicePause;
+	NtService_OnServiceContinue OnServiceContinue;
+	NtService_OnServiceShutdown OnServiceShutdown;
+	NtService_OnDeviceEvent OnDeviceEvent;
+	NtService_OnHardwareProfileChange OnHardwareProfileChange;
+	NtService_OnPowerEvent OnPowerEvent;
+	NtService_OnSessionChange OnSessionChange;
+	NtService_OnTimeChange OnTimeChange;
+	NtService_OnTriggerEvent OnTriggerEvent;
 
 	// Private members
 	SERVICE_STATUS ssStatus;
 	SERVICE_STATUS_HANDLE sshStatusHandle;
 	DWORD dwControlsAccepted;
-} NTServiceStruct;
+} NtServiceStruct;
 
 #define ASSIGN_STRING(target, source) \
 { \
@@ -51,25 +51,28 @@ typedef struct
 }
 
 // Implementation is currently a singleton.
-static NTServiceStruct* g_TheService = NULL;
+static NtServiceStruct* g_TheService = NULL;
 
-static void NTService_UpdateControlsAccepted(NTService* service);
+static void NtService_UpdateControlsAccepted(NtService* service);
 static void GetLastErrorText(LPTSTR lpBuffer, int nSize);
 
-NTService* NTService_New(LPCTSTR serviceName, LPCTSTR displayName, LPCTSTR description)
+NtService* NtService_New(LPCTSTR serviceName, LPCTSTR displayName, LPCTSTR description)
 {
-	NTServiceStruct* self;
+	NtServiceStruct* self;
+
+	printf("serviceName: %s displayName: %s description: %s\n",
+		serviceName, displayName, description);
 
 	// Implementation currently only supports 1 service.
 	if (g_TheService)
 		return NULL;
 
-	self = (NTServiceStruct*) malloc(sizeof(NTServiceStruct));
+	self = (NtServiceStruct*) malloc(sizeof(NtServiceStruct));
 	
 	if (!self)
 		return NULL;
 
-	memset(self, 0, sizeof(NTServiceStruct));
+	memset(self, 0, sizeof(NtServiceStruct));
 	ASSIGN_STRING(self->pszServiceName, serviceName);
 	ASSIGN_STRING(self->pszDisplayName, displayName);
 	ASSIGN_STRING(self->pszDescription, description);
@@ -85,12 +88,12 @@ NTService* NTService_New(LPCTSTR serviceName, LPCTSTR displayName, LPCTSTR descr
 
 	g_TheService = self;
 
-	return (NTService*) self;
+	return (NtService*) self;
 }
 
-void NTService_Free(NTService* service)
+void NtService_Free(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 	
 	g_TheService = NULL;
 	
@@ -121,295 +124,295 @@ void NTService_Free(NTService* service)
 //
 // Properties
 //
-LPCTSTR NTService_GetServiceName(NTService* service)
+LPCTSTR NtService_GetServiceName(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->pszServiceName;
 }
 
-void NTService_SetServiceName(NTService* service, LPCTSTR value)
+void NtService_SetServiceName(NtService* service, LPCTSTR value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	ASSIGN_STRING(self->pszServiceName, value);
 }
 
-LPCTSTR NTService_GetDisplayName(NTService* service)
+LPCTSTR NtService_GetDisplayName(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->pszDisplayName;
 }
 
-void NTService_SetDisplayName(NTService* service, LPCTSTR value)
+void NtService_SetDisplayName(NtService* service, LPCTSTR value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	ASSIGN_STRING(self->pszDisplayName, value);
 }
 
-LPCTSTR NTService_GetDescription(NTService* service)
+LPCTSTR NtService_GetDescription(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->pszDescription;
 }
 
-void NTService_SetDescription(NTService* service, LPCTSTR value)
+void NtService_SetDescription(NtService* service, LPCTSTR value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	ASSIGN_STRING(self->pszDescription, value);
 }
 
-DWORD NTService_GetDesiredAccess(NTService* service)
+DWORD NtService_GetDesiredAccess(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->dwDesiredAccess;
 }
 
-void NTService_SetDesiredAccess(NTService* service, DWORD value)
+void NtService_SetDesiredAccess(NtService* service, DWORD value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->dwDesiredAccess = value;
 }
 
-DWORD NTService_GetServiceType(NTService* service)
+DWORD NtService_GetServiceType(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->dwServiceType;
 }
 
-void NTService_SetServiceType(NTService* service, DWORD value)
+void NtService_SetServiceType(NtService* service, DWORD value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->dwServiceType = value;
 }
 
-DWORD NTService_GetStartType(NTService* service)
+DWORD NtService_GetStartType(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->dwStartType;
 }
 
-void NTService_SetStartType(NTService* service, DWORD value)
+void NtService_SetStartType(NtService* service, DWORD value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->dwStartType = value;
 }
 
-DWORD NTService_GetErrorControl(NTService* service)
+DWORD NtService_GetErrorControl(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->dwErrorControl;
 }
 
-void NTService_SetErrorControl(NTService* service, DWORD value)
+void NtService_SetErrorControl(NtService* service, DWORD value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->dwErrorControl = value;
 }
 
-LPCTSTR NTService_GetLoadOrderGroup(NTService* service)
+LPCTSTR NtService_GetLoadOrderGroup(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->pszLoadOrderGroup;
 }
 
-void NTService_SetLoadOrderGroup(NTService* service, LPCTSTR value)
+void NtService_SetLoadOrderGroup(NtService* service, LPCTSTR value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	ASSIGN_STRING(self->pszLoadOrderGroup, value);
 }
 
-LPCTSTR NTService_GetDependencies(NTService* service)
+LPCTSTR NtService_GetDependencies(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->pszDependencies;
 }
 
-void NTService_SetDependencies(NTService* service, LPCTSTR value)
+void NtService_SetDependencies(NtService* service, LPCTSTR value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	ASSIGN_STRING(self->pszDependencies, value);
 }
 
-LPCTSTR NTService_GetAccountName(NTService* service)
+LPCTSTR NtService_GetAccountName(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->pszAccountName;
 }
 
-void NTService_SetAccountName(NTService* service, LPCTSTR value)
+void NtService_SetAccountName(NtService* service, LPCTSTR value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	ASSIGN_STRING(self->pszAccountName, value);
 }
 
-LPCTSTR NTService_GetPassword(NTService* service)
+LPCTSTR NtService_GetPassword(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->pszPassword;
 }
 
-void NTService_SetPassword(NTService* service, LPCTSTR value)
+void NtService_SetPassword(NtService* service, LPCTSTR value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	ASSIGN_STRING(self->pszPassword, value);
 }
 
-void* NTService_Getvalue(NTService* service)
+void* NtService_Getvalue(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	return self->lpvalue;
 }
 
-void NTService_Setvalue(NTService* service, void* value)
+void NtService_Setvalue(NtService* service, void* value)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->lpvalue = value;
 }
 
-void NTService_SetOnServiceCreated(NTService* service, NTService_OnServiceCreated onServiceCreated)
+void NtService_SetOnServiceCreated(NtService* service, NtService_OnServiceCreated onServiceCreated)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnServiceCreated = onServiceCreated;
 }
 
-void NTService_SetOnServiceDeleted(NTService* service, NTService_OnServiceDeleted onServiceDeleted)
+void NtService_SetOnServiceDeleted(NtService* service, NtService_OnServiceDeleted onServiceDeleted)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnServiceDeleted = onServiceDeleted;
 }
 
-void NTService_SetOnServiceStart(NTService* service, NTService_OnServiceStart onServiceStart)
+void NtService_SetOnServiceStart(NtService* service, NtService_OnServiceStart onServiceStart)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnServiceStart = onServiceStart;
 }
 
-void NTService_SetOnServiceStop(NTService* service, NTService_OnServiceStop onServiceStop)
+void NtService_SetOnServiceStop(NtService* service, NtService_OnServiceStop onServiceStop)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnServiceStop = onServiceStop;
 }
 
-void NTService_SetOnServicePause(NTService* service, NTService_OnServicePause onServicePause)
+void NtService_SetOnServicePause(NtService* service, NtService_OnServicePause onServicePause)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnServicePause = onServicePause;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
-void NTService_SetOnServiceContinue(NTService* service, NTService_OnServiceContinue onServiceContinue)
+void NtService_SetOnServiceContinue(NtService* service, NtService_OnServiceContinue onServiceContinue)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnServiceContinue = onServiceContinue;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
-void NTService_SetOnServiceShutdown(NTService* service, NTService_OnServiceShutdown onServiceShutdown)
+void NtService_SetOnServiceShutdown(NtService* service, NtService_OnServiceShutdown onServiceShutdown)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnServiceShutdown = onServiceShutdown;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
-void NTService_SetOnDeviceEvent(NTService* service, NTService_OnDeviceEvent onDeviceEvent)
+void NtService_SetOnDeviceEvent(NtService* service, NtService_OnDeviceEvent onDeviceEvent)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnDeviceEvent = onDeviceEvent;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
-void NTService_SetOnHardwareProfileChange(NTService* service, NTService_OnHardwareProfileChange onHardwareProfileChange)
+void NtService_SetOnHardwareProfileChange(NtService* service, NtService_OnHardwareProfileChange onHardwareProfileChange)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnHardwareProfileChange = onHardwareProfileChange;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
-void NTService_SetOnPowerEvent(NTService* service, NTService_OnPowerEvent onPowerEvent)
+void NtService_SetOnPowerEvent(NtService* service, NtService_OnPowerEvent onPowerEvent)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnPowerEvent = onPowerEvent;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
-void NTService_SetOnSessionChange(NTService* service, NTService_OnSessionChange onSessionChange)
+void NtService_SetOnSessionChange(NtService* service, NtService_OnSessionChange onSessionChange)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnSessionChange = onSessionChange;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
-void NTService_SetOnTimeChange(NTService* service, NTService_OnTimeChange onTimeChange)
+void NtService_SetOnTimeChange(NtService* service, NtService_OnTimeChange onTimeChange)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnTimeChange = onTimeChange;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
-void NTService_SetOnTriggerEvent(NTService* service, NTService_OnTriggerEvent onTriggerEvent)
+void NtService_SetOnTriggerEvent(NtService* service, NtService_OnTriggerEvent onTriggerEvent)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->OnTriggerEvent = onTriggerEvent;
 
-	NTService_UpdateControlsAccepted(service);
+	NtService_UpdateControlsAccepted(service);
 }
 
 
 //
 // Methods
 //
-bool NTService_CreateService(NTService* service)
+bool NtService_CreateService(NtService* service)
 {
 	TCHAR szExeFileName[MAX_PATH];
 	SC_HANDLE scManager;
 	SC_HANDLE hService;
 	bool success = false;
 
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	if (GetModuleFileName(NULL, szExeFileName, MAX_PATH) == 0)
 	{
@@ -467,13 +470,13 @@ bool NTService_CreateService(NTService* service)
 	return success;
 }
 
-bool NTService_DeleteService(NTService* service)
+bool NtService_DeleteService(NtService* service)
 {
 	SC_HANDLE scManager;
 	SC_HANDLE hService;
 	bool success = false;
 
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	scManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 	
@@ -541,12 +544,12 @@ bool NTService_DeleteService(NTService* service)
 	return success;
 }
 
-bool NTService_StartService(NTService* service)
+bool NtService_StartService(NtService* service)
 {
 	SC_HANDLE scManager;
 	SC_HANDLE hService;
 	bool success = false;
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	scManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 	
@@ -604,13 +607,13 @@ bool NTService_StartService(NTService* service)
 	return success;
 }
 
-bool NTService_StopService(NTService* service)
+bool NtService_StopService(NtService* service)
 {
 	SC_HANDLE scManager;
 	SC_HANDLE hService;
 	bool success = false;
 
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	scManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 	
@@ -669,9 +672,9 @@ bool NTService_StopService(NTService* service)
 	return success;
 }
 
-void NTService_ReportStatus(NTService* service, DWORD currentState, DWORD waitHint)
+void NtService_ReportStatus(NtService* service, DWORD currentState, DWORD waitHint)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->ssStatus.dwControlsAccepted = (currentState == SERVICE_START_PENDING ? 0 : self->dwControlsAccepted);
 
@@ -691,9 +694,9 @@ void NTService_ReportStatus(NTService* service, DWORD currentState, DWORD waitHi
 	SetServiceStatus(self->sshStatusHandle, &self->ssStatus);
 }
 
-static DWORD WINAPI NTService_ServiceCtrlHandlerEx(DWORD controlCode, DWORD eventType, void* eventData, void* value)
+static DWORD WINAPI NtService_ServiceCtrlHandlerEx(DWORD controlCode, DWORD eventType, void* eventData, void* value)
 {
-	NTService* service = (NTService*) g_TheService;
+	NtService* service = (NtService*) g_TheService;
 	DWORD retCode = ERROR_CALL_NOT_IMPLEMENTED;
 
 	switch (controlCode)
@@ -701,7 +704,7 @@ static DWORD WINAPI NTService_ServiceCtrlHandlerEx(DWORD controlCode, DWORD even
 		case SERVICE_CONTROL_STOP:
 			if (g_TheService->OnServiceStop)
 			{
-				NTService_ReportStatus(service, SERVICE_STOP_PENDING, 3000);
+				NtService_ReportStatus(service, SERVICE_STOP_PENDING, 3000);
 				g_TheService->OnServiceStop(service, value);
 				retCode = NO_ERROR;
 			}
@@ -710,9 +713,9 @@ static DWORD WINAPI NTService_ServiceCtrlHandlerEx(DWORD controlCode, DWORD even
 		case SERVICE_CONTROL_PAUSE:
 			if (g_TheService->OnServicePause)
 			{
-				NTService_ReportStatus(service, SERVICE_PAUSE_PENDING, 3000);
+				NtService_ReportStatus(service, SERVICE_PAUSE_PENDING, 3000);
 				g_TheService->OnServicePause(service, value);
-				NTService_ReportStatus(service, SERVICE_PAUSED, 0);
+				NtService_ReportStatus(service, SERVICE_PAUSED, 0);
 				retCode = NO_ERROR;
 			}
 			break;
@@ -720,9 +723,9 @@ static DWORD WINAPI NTService_ServiceCtrlHandlerEx(DWORD controlCode, DWORD even
 		case SERVICE_CONTROL_CONTINUE:
 			if (g_TheService->OnServiceContinue)
 			{
-				NTService_ReportStatus(service, SERVICE_CONTINUE_PENDING, 3000);
+				NtService_ReportStatus(service, SERVICE_CONTINUE_PENDING, 3000);
 				g_TheService->OnServiceContinue(service, value);
-				NTService_ReportStatus(service, SERVICE_RUNNING, 0);
+				NtService_ReportStatus(service, SERVICE_RUNNING, 0);
 				retCode = NO_ERROR;
 			}
 			break;
@@ -784,7 +787,7 @@ static DWORD WINAPI NTService_ServiceCtrlHandlerEx(DWORD controlCode, DWORD even
 			break;
 
 		case SERVICE_CONTROL_INTERROGATE:
-			NTService_ReportStatus(service, g_TheService->ssStatus.dwCurrentState, 0);
+			NtService_ReportStatus(service, g_TheService->ssStatus.dwCurrentState, 0);
 			retCode = NO_ERROR;
 			break;
 
@@ -795,15 +798,15 @@ static DWORD WINAPI NTService_ServiceCtrlHandlerEx(DWORD controlCode, DWORD even
 	return retCode;
 }
 
-static void WINAPI NTService_ServiceMain(DWORD argc, LPTSTR* argv)
+static void WINAPI NtService_ServiceMain(DWORD argc, LPTSTR* argv)
 {
 	g_TheService->sshStatusHandle = RegisterServiceCtrlHandlerEx(g_TheService->pszServiceName,
-		                                                     NTService_ServiceCtrlHandlerEx,
+		                                                     NtService_ServiceCtrlHandlerEx,
 		                                                     g_TheService->lpvalue);
 
 	if (g_TheService->sshStatusHandle)
 	{
-		NTService_ReportStatus(g_TheService, SERVICE_START_PENDING, 3000);
+		NtService_ReportStatus(g_TheService, SERVICE_START_PENDING, 3000);
 
 		// Invoke the OnServiceStart callback.
 		if (g_TheService->OnServiceStart)
@@ -811,18 +814,18 @@ static void WINAPI NTService_ServiceMain(DWORD argc, LPTSTR* argv)
 			g_TheService->OnServiceStart(g_TheService, g_TheService->lpvalue);
 		}
 
-		NTService_ReportStatus(g_TheService, SERVICE_STOPPED, 0);
+		NtService_ReportStatus(g_TheService, SERVICE_STOPPED, 0);
 	}
 }
 
-static bool NTService_StartDispatcher(NTService* service)
+static bool NtService_StartDispatcher(NtService* service)
 {
 	SERVICE_TABLE_ENTRY dispatchTable[2];
 
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	dispatchTable[0].lpServiceName = (LPTSTR) self->pszServiceName;
-	dispatchTable[0].lpServiceProc = NTService_ServiceMain;
+	dispatchTable[0].lpServiceProc = NtService_ServiceMain;
 
 	dispatchTable[1].lpServiceName = NULL;
 	dispatchTable[1].lpServiceProc = NULL;
@@ -830,17 +833,17 @@ static bool NTService_StartDispatcher(NTService* service)
 	return StartServiceCtrlDispatcher(dispatchTable) ? true : false;
 }
 
-bool NTService_ProcessCommandLine(NTService* service, int argc, LPCTSTR* argv)
+bool NtService_ProcessCommandLine(NtService* service, int argc, LPCTSTR* argv)
 {
-	bool (*pFunction)(NTService* s);
+	bool (*pFunction)(NtService* s);
 	LPCTSTR accountName = NULL;
 	LPCTSTR password = NULL;
 	bool success;
 
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	// Default to the service dispatcher.
-	pFunction = NTService_StartDispatcher;
+	pFunction = NtService_StartDispatcher;
 
 	argc--;
 	argv++;
@@ -852,16 +855,16 @@ bool NTService_ProcessCommandLine(NTService* service, int argc, LPCTSTR* argv)
 			switch (argv[0][1])
 			{
 				case _T('i'):  // Install the service
-					pFunction = NTService_CreateService;
+					pFunction = NtService_CreateService;
 					break;
 				case _T('u'):  // Uninstall the service
-					pFunction = NTService_DeleteService;
+					pFunction = NtService_DeleteService;
 					break;
 				case _T('s'):  // Start the service
-					pFunction = NTService_StartService;
+					pFunction = NtService_StartService;
 					break;
 				case _T('k'):  // Kill the service
-					pFunction = NTService_StopService;
+					pFunction = NtService_StopService;
 					break;
 				case _T('a'):  // Account name
 					accountName = argv[1];
@@ -884,12 +887,12 @@ bool NTService_ProcessCommandLine(NTService* service, int argc, LPCTSTR* argv)
 
 	if (accountName)
 	{
-		NTService_SetAccountName(service, accountName);
+		NtService_SetAccountName(service, accountName);
 	}
 
 	if (password)
 	{
-		NTService_SetPassword(service, password);
+		NtService_SetPassword(service, password);
 	}
 
 	success = pFunction(service);
@@ -897,13 +900,13 @@ bool NTService_ProcessCommandLine(NTService* service, int argc, LPCTSTR* argv)
 	if (success)
 	{
 		// Invoke the OnServiceCreated callback.
-		if ((pFunction == NTService_CreateService) && (self->OnServiceCreated))
+		if ((pFunction == NtService_CreateService) && (self->OnServiceCreated))
 		{
 			self->OnServiceCreated(service, self->lpvalue);
 		}
 
 		// Invoke the OnServiceDeleted callback.
-		if ((pFunction == NTService_DeleteService) && (self->OnServiceDeleted))
+		if ((pFunction == NtService_DeleteService) && (self->OnServiceDeleted))
 		{
 			self->OnServiceDeleted(service, self->lpvalue);
 		}
@@ -915,9 +918,9 @@ bool NTService_ProcessCommandLine(NTService* service, int argc, LPCTSTR* argv)
 //
 // Local functions
 //
-static void NTService_UpdateControlsAccepted(NTService* service)
+static void NtService_UpdateControlsAccepted(NtService* service)
 {
-	NTServiceStruct* self = (NTServiceStruct*) service;
+	NtServiceStruct* self = (NtServiceStruct*) service;
 
 	self->dwControlsAccepted = SERVICE_ACCEPT_STOP;
 

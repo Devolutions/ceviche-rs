@@ -4,64 +4,64 @@
 #include <stdbool.h>
 #include <windows.h>
 
-typedef void NTService;
+typedef void NtService;
 
 // Callback definitions
-typedef void (*NTService_OnServiceCreated)(NTService* service, void* context);
-typedef void (*NTService_OnServiceDeleted)(NTService* service, void* context);
-typedef void (*NTService_OnServiceStart)(NTService* service, void* context);
-typedef void (*NTService_OnServiceStop)(NTService* service, void* context);
-typedef void (*NTService_OnServicePause)(NTService* service, void* context);
-typedef void (*NTService_OnServiceContinue)(NTService* service, void* context);
-typedef void (*NTService_OnServiceShutdown)(NTService* service, void* context);
-typedef void (*NTService_OnDeviceEvent)(NTService* service, DWORD eventType, void* eventData, void* context);
-typedef void (*NTService_OnHardwareProfileChange)(NTService* service, DWORD eventType, void* eventData, void* context);
-typedef void (*NTService_OnPowerEvent)(NTService* service, DWORD eventType, void* eventData, void* context);
-typedef void (*NTService_OnSessionChange)(NTService* service, DWORD eventType, void* eventData, void* context);
-typedef void (*NTService_OnTimeChange)(NTService* service, DWORD eventType, void* eventData, void* context);
-typedef void (*NTService_OnTriggerEvent)(NTService* service, DWORD eventType, void* eventData, void* context);
-typedef void (*NTService_OnUserModeReboot)(NTService* service, DWORD eventType, void* eventData, void* context);
+typedef void (*NtService_OnServiceCreated)(NtService* service, void* context);
+typedef void (*NtService_OnServiceDeleted)(NtService* service, void* context);
+typedef void (*NtService_OnServiceStart)(NtService* service, void* context);
+typedef void (*NtService_OnServiceStop)(NtService* service, void* context);
+typedef void (*NtService_OnServicePause)(NtService* service, void* context);
+typedef void (*NtService_OnServiceContinue)(NtService* service, void* context);
+typedef void (*NtService_OnServiceShutdown)(NtService* service, void* context);
+typedef void (*NtService_OnDeviceEvent)(NtService* service, DWORD eventType, void* eventData, void* context);
+typedef void (*NtService_OnHardwareProfileChange)(NtService* service, DWORD eventType, void* eventData, void* context);
+typedef void (*NtService_OnPowerEvent)(NtService* service, DWORD eventType, void* eventData, void* context);
+typedef void (*NtService_OnSessionChange)(NtService* service, DWORD eventType, void* eventData, void* context);
+typedef void (*NtService_OnTimeChange)(NtService* service, DWORD eventType, void* eventData, void* context);
+typedef void (*NtService_OnTriggerEvent)(NtService* service, DWORD eventType, void* eventData, void* context);
+typedef void (*NtService_OnUserModeReboot)(NtService* service, DWORD eventType, void* eventData, void* context);
 
 // Constructor/destructor
-NTService* NTService_New(LPCTSTR serviceName, LPCTSTR displayName, LPCTSTR description);
-void NTService_Free(NTService* service);
+NtService* NtService_New(LPCTSTR serviceName, LPCTSTR displayName, LPCTSTR description);
+void NtService_Free(NtService* service);
 
 // Properties
-LPCTSTR NTService_GetServiceName(NTService* service);
-void NTService_SetServiceName(NTService* service, LPCTSTR value);
+LPCTSTR NtService_GetServiceName(NtService* service);
+void NtService_SetServiceName(NtService* service, LPCTSTR value);
 
-LPCTSTR NTService_GetDisplayName(NTService* service);
-void NTService_SetDisplayName(NTService* service, LPCTSTR value);
+LPCTSTR NtService_GetDisplayName(NtService* service);
+void NtService_SetDisplayName(NtService* service, LPCTSTR value);
 
-LPCTSTR NTService_GetDescription(NTService* service);
-void NTService_SetDescription(NTService* service, LPCTSTR value);
+LPCTSTR NtService_GetDescription(NtService* service);
+void NtService_SetDescription(NtService* service, LPCTSTR value);
 
-DWORD NTService_GetDesiredAccess(NTService* service);
-void NTService_SetDesiredAccess(NTService* service, DWORD value);
+DWORD NtService_GetDesiredAccess(NtService* service);
+void NtService_SetDesiredAccess(NtService* service, DWORD value);
 
-DWORD NTService_GetServiceType(NTService* service);
-void NTService_SetServiceType(NTService* service, DWORD value);
+DWORD NtService_GetServiceType(NtService* service);
+void NtService_SetServiceType(NtService* service, DWORD value);
 
-DWORD NTService_GetStartType(NTService* service);
-void NTService_SetStartType(NTService* service, DWORD value);
+DWORD NtService_GetStartType(NtService* service);
+void NtService_SetStartType(NtService* service, DWORD value);
 
-DWORD NTService_GetErrorControl(NTService* service);
-void NTService_SetErrorControl(NTService* service, DWORD value);
+DWORD NtService_GetErrorControl(NtService* service);
+void NtService_SetErrorControl(NtService* service, DWORD value);
 
-LPCTSTR NTService_GetLoadOrderGroup(NTService* service);
-void NTService_SetLoadOrderGroup(NTService* service, LPCTSTR value);
+LPCTSTR NtService_GetLoadOrderGroup(NtService* service);
+void NtService_SetLoadOrderGroup(NtService* service, LPCTSTR value);
 
-LPCTSTR NTService_GetDependencies(NTService* service);
-void NTService_SetDependencies(NTService* service, LPCTSTR value);
+LPCTSTR NtService_GetDependencies(NtService* service);
+void NtService_SetDependencies(NtService* service, LPCTSTR value);
 
-LPCTSTR NTService_GetAccountName(NTService* service);
-void NTService_SetAccountName(NTService* service, LPCTSTR value);
+LPCTSTR NtService_GetAccountName(NtService* service);
+void NtService_SetAccountName(NtService* service, LPCTSTR value);
 
-LPCTSTR NTService_GetPassword(NTService* service);
-void NTService_SetPassword(NTService* service, LPCTSTR value);
+LPCTSTR NtService_GetPassword(NtService* service);
+void NtService_SetPassword(NtService* service, LPCTSTR value);
 
-void* NTService_GetContext(NTService* service);
-void NTService_SetContext(NTService* service, void* context);
+void* NtService_GetContext(NtService* service);
+void NtService_SetContext(NtService* service, void* context);
 
 //**********************************************************************
 //
@@ -101,25 +101,25 @@ void NTService_SetContext(NTService* service, void* context);
 //
 //**********************************************************************
 
-void NTService_SetOnServiceCreated(NTService* service, NTService_OnServiceCreated onServiceCreated);
-void NTService_SetOnServiceDeleted(NTService* service, NTService_OnServiceDeleted onServiceDeleted);
-void NTService_SetOnServiceStart(NTService* service, NTService_OnServiceStart onServiceStart);
-void NTService_SetOnServiceStop(NTService* service, NTService_OnServiceStop onServiceStop);
-void NTService_SetOnServicePause(NTService* service, NTService_OnServicePause onServicePause);
-void NTService_SetOnServiceContinue(NTService* service, NTService_OnServiceContinue onServiceContinue);
-void NTService_SetOnServiceShutdown(NTService* service, NTService_OnServiceShutdown onServiceShutdown);
-void NTService_SetOnDeviceEvent(NTService* service, NTService_OnDeviceEvent onDeviceEvent);
-void NTService_SetOnHardwareProfileChange(NTService* service, NTService_OnHardwareProfileChange onHardwareProfileChange);
-void NTService_SetOnPowerEvent(NTService* service, NTService_OnPowerEvent onPowerEvent);
-void NTService_SetOnSessionChange(NTService* service, NTService_OnSessionChange onSessionChange);
-void NTService_SetOnTimeChange(NTService* service, NTService_OnTimeChange onTimeChange);
-void NTService_SetOnTriggerEvent(NTService* service, NTService_OnTriggerEvent onTriggerEvent);
+void NtService_SetOnServiceCreated(NtService* service, NtService_OnServiceCreated onServiceCreated);
+void NtService_SetOnServiceDeleted(NtService* service, NtService_OnServiceDeleted onServiceDeleted);
+void NtService_SetOnServiceStart(NtService* service, NtService_OnServiceStart onServiceStart);
+void NtService_SetOnServiceStop(NtService* service, NtService_OnServiceStop onServiceStop);
+void NtService_SetOnServicePause(NtService* service, NtService_OnServicePause onServicePause);
+void NtService_SetOnServiceContinue(NtService* service, NtService_OnServiceContinue onServiceContinue);
+void NtService_SetOnServiceShutdown(NtService* service, NtService_OnServiceShutdown onServiceShutdown);
+void NtService_SetOnDeviceEvent(NtService* service, NtService_OnDeviceEvent onDeviceEvent);
+void NtService_SetOnHardwareProfileChange(NtService* service, NtService_OnHardwareProfileChange onHardwareProfileChange);
+void NtService_SetOnPowerEvent(NtService* service, NtService_OnPowerEvent onPowerEvent);
+void NtService_SetOnSessionChange(NtService* service, NtService_OnSessionChange onSessionChange);
+void NtService_SetOnTimeChange(NtService* service, NtService_OnTimeChange onTimeChange);
+void NtService_SetOnTriggerEvent(NtService* service, NtService_OnTriggerEvent onTriggerEvent);
 
-bool NTService_ProcessCommandLine(NTService* service, int argc, LPCTSTR* argv);
-bool NTService_CreateService(NTService* service);
-bool NTService_DeleteService(NTService* service);
-bool NTService_StartService(NTService* service);
-bool NTService_StopService(NTService* service);
-void NTService_ReportStatus(NTService* service, DWORD dwCurrentState, DWORD dwWaitHint);
+bool NtService_ProcessCommandLine(NtService* service, int argc, LPCTSTR* argv);
+bool NtService_CreateService(NtService* service);
+bool NtService_DeleteService(NtService* service);
+bool NtService_StartService(NtService* service);
+bool NtService_StopService(NtService* service);
+void NtService_ReportStatus(NtService* service, DWORD dwCurrentState, DWORD dwWaitHint);
 
 #endif
