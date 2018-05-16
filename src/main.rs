@@ -1,19 +1,38 @@
 extern crate libc;
 
+#[macro_use]
 #[cfg(windows)]
 extern crate winapi;
 
 use winapi::um::winsvc::*;
 use winapi::um::winnt::*;
-use winapi::um::libloaderapi::*;
 use winapi::um::winbase::*;
-use winapi::shared::minwindef::{DWORD, MAX_PATH};
+use winapi::um::libloaderapi::*;
+use winapi::shared::minwindef::*;
 
 use std::env;
 use std::ptr;
-use std::ffi::CString;
+use std::ffi::{OsStr,CString};
+use std::os::windows::ffi::OsStrExt;
+use std::iter::once;
 
-use libc::{c_int, c_char};
+use libc::{c_int, c_char, c_void};
+
+#[allow(non_camel_case_types, non_snake_case)]
+
+#[repr(C)]
+STRUCT!{struct SERVICE_DESCRIPTION_W {
+	lpDescription: LPWSTR,
+}}
+pub type PSERVICE_DESCRIPTION_W = *mut SERVICE_DESCRIPTION_W;
+
+extern "system" {
+	pub fn ChangeServiceConfig2W(
+       hService: SC_HANDLE,
+       dwInfoLevel: DWORD,
+       lpInfo: LPVOID,
+   ) -> BOOL;
+}
 
 pub enum NtService {}
 
@@ -33,6 +52,10 @@ pub struct Service {
     pub start_type: DWORD,
     pub error_control: DWORD,
     pub tag_id: DWORD,
+    pub load_order_group: String,
+    pub dependencies: String,
+    pub account_name: String,
+    pub password: String,
 }
 
 impl Service {
@@ -61,11 +84,53 @@ impl Service {
         	start_type: SERVICE_AUTO_START,
         	error_control: SERVICE_ERROR_NORMAL,
         	tag_id: 0,
+        	load_order_group: "".to_string(),
+        	dependencies: "".to_string(),
+        	account_name: "".to_string(),
+        	password: "".to_string(),
         })
     }
 
-    pub fn create(&mut self) {
+    pub fn create(&mut self) -> bool {
+    	unsafe {
+			let filename = get_filename();
+			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
+			if sc_manager.is_null() {
+				return false;
+			}
+
+			let mut tag_id: DWORD = 0;
+
+			let h_service = CreateServiceW(sc_manager,
+				get_utf16(self.service_name.as_str()).as_ptr(),
+				get_utf16(self.display_name.as_str()).as_ptr(),
+				self.desired_access, self.service_type,
+				self.start_type, self.error_control,
+				get_utf16(filename.as_str()).as_ptr(),
+				ptr::null_mut(),
+				&mut tag_id,
+				ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+
+			if h_service.is_null() {
+				return false;
+			}
+
+			let mut sd = SERVICE_DESCRIPTION_W {
+				lpDescription: get_utf16(self.description.as_str()).as_mut_ptr(),
+			};
+
+			//let sd_ptr: *mut c_void = &mut sd;
+			//let success = ChangeServiceConfig2W(ptr::null_mut(), 0, &*sd as *mut winapi::ctypes::c_void);
+
+			CloseServiceHandle(sc_manager);
+
+			true
+		}
+    }
+
+	pub fn delete(&mut self) -> bool {
+    	true
     }
 }
 
@@ -77,15 +142,17 @@ impl Drop for Service {
     }
 }
 
-#[allow(non_camel_case_types, non_snake_case)]
+fn get_utf16(value : &str) -> Vec<u16> {
+	OsStr::new(value).encode_wide().chain(once(0)).collect()
+}
 
 fn get_filename() -> String {
 	unsafe {
 		let mut filename: [u16; MAX_PATH] = [0; MAX_PATH];
 		let nSize = GetModuleFileNameW(ptr::null_mut(),
-			filename.as_ptr() as *mut u16,
+			filename.as_mut_ptr(),
 			filename.len() as DWORD);
-		String::from_utf16(&lpFilename).unwrap()
+		String::from_utf16(&filename).unwrap()
 	}
 }
 
