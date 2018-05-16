@@ -1,7 +1,18 @@
 extern crate libc;
 
+#[cfg(windows)]
+extern crate winapi;
+
+use winapi::um::winsvc::*;
+use winapi::um::winnt::*;
+use winapi::um::libloaderapi::*;
+use winapi::um::winbase::*;
+use winapi::shared::minwindef::{DWORD, MAX_PATH};
+
 use std::env;
+use std::ptr;
 use std::ffi::CString;
+
 use libc::{c_int, c_char};
 
 pub enum NtService {}
@@ -13,7 +24,15 @@ extern {
 }
 
 pub struct Service {
-    ctx: *mut NtService
+    ctx: *mut NtService,
+    pub service_name: String,
+    pub display_name: String,
+    pub description: String,
+    pub desired_access: DWORD,
+    pub service_type: DWORD,
+    pub start_type: DWORD,
+    pub error_control: DWORD,
+    pub tag_id: DWORD,
 }
 
 impl Service {
@@ -32,7 +51,21 @@ impl Service {
     		NtService_ProcessCommandLine(raw_service, c_args.len() as c_int, c_args.as_ptr());
     	};
 
-        Some(Service { ctx: raw_service })
+        Some(Service {
+        	ctx: raw_service,
+        	service_name: service_name.to_string(),
+        	display_name: display_name.to_string(),
+        	description: description.to_string(),
+        	desired_access: SERVICE_ALL_ACCESS,
+        	service_type: SERVICE_WIN32_OWN_PROCESS,
+        	start_type: SERVICE_AUTO_START,
+        	error_control: SERVICE_ERROR_NORMAL,
+        	tag_id: 0,
+        })
+    }
+
+    pub fn create(&mut self) {
+
     }
 }
 
@@ -44,6 +77,32 @@ impl Drop for Service {
     }
 }
 
+#[allow(non_camel_case_types, non_snake_case)]
+
+fn get_filename() -> String {
+	unsafe {
+		let mut filename: [u16; MAX_PATH] = [0; MAX_PATH];
+		let nSize = GetModuleFileNameW(ptr::null_mut(),
+			filename.as_ptr() as *mut u16,
+			filename.len() as DWORD);
+		String::from_utf16(&lpFilename).unwrap()
+	}
+}
+
+fn get_username() -> String {
+    unsafe {
+        let mut size = 0;
+        GetUserNameW(ptr::null_mut(), &mut size);
+        let mut username = Vec::with_capacity(size as usize);
+        GetUserNameW(username.as_mut_ptr(), &mut size);
+        username.set_len(size as usize);
+        String::from_utf16(&username).unwrap()
+    }
+}
+
 fn main() {
+	let username = get_username();
+	let filename = get_filename();
+	println!("username: {} filename: {}", username, filename);
 	let service = Service::new("foobar", "FooBar Service", "This is the FooBar service");
 }
