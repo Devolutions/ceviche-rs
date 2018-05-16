@@ -20,6 +20,7 @@ use std::ffi::{OsStr,CString};
 use std::os::windows::ffi::OsStrExt;
 use std::iter::once;
 use std::{thread, time};
+use std::io::{Error, ErrorKind};
 
 use libc::{c_int, c_char};
 
@@ -277,6 +278,27 @@ impl Service {
 	    	true
 	    }
     }
+
+    fn register(&mut self) -> Result<(), Error>
+	{
+		unsafe {
+			let service_name = get_utf16(self.service_name.as_str());
+
+			let service_table: &[*const SERVICE_TABLE_ENTRYW] = &[
+				&SERVICE_TABLE_ENTRYW {
+					lpServiceName: service_name.as_ptr(),
+					lpServiceProc: Some(service_main),
+				},
+				ptr::null()
+			];
+
+			match StartServiceCtrlDispatcherW(*service_table.as_ptr())
+			{
+				0 => Err(Error::new(ErrorKind::Other, "StartServiceCtrlDispatcherW")),
+				_ => Ok(())
+			}
+		}
+	}
 }
 
 impl Drop for Service {
@@ -284,6 +306,42 @@ impl Drop for Service {
         unsafe {
         }
     }
+}
+
+fn set_service_status(status_handle: SERVICE_STATUS_HANDLE, current_state: DWORD, wait_hint: DWORD) {
+	let mut service_status = SERVICE_STATUS {
+		dwServiceType: SERVICE_WIN32_OWN_PROCESS,
+		dwCurrentState: current_state,
+		dwControlsAccepted: SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN,
+		dwWin32ExitCode: 0,
+		dwServiceSpecificExitCode: 0,
+		dwCheckPoint: 0,
+		dwWaitHint: wait_hint,
+	};
+	unsafe {
+		SetServiceStatus(status_handle, &mut service_status);
+	}
+}
+
+unsafe extern "system"
+fn service_main(argc: DWORD, argv: *mut LPWSTR) {
+	let service_name = get_utf16("foobar");
+	let ctrl_handle = RegisterServiceCtrlHandlerExW(service_name.as_ptr(), Some(service_handler), ptr::null_mut());
+	set_service_status(ctrl_handle, SERVICE_START_PENDING, 0);
+	set_service_status(ctrl_handle, SERVICE_RUNNING, 0);
+	thread::sleep(time::Duration::from_millis(5000)); // "run" for 5 seconds
+	set_service_status(ctrl_handle, SERVICE_STOPPED, 0);
+}
+
+unsafe extern "system"
+fn service_handler(control: DWORD, event_type: DWORD, event_data: LPVOID, context: LPVOID) -> DWORD {
+	match control {
+		SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
+			//set_service_status(ctrl_handle, SERVICE_STOP_PENDING, 0);
+		}
+		_ => {}
+	};
+	0
 }
 
 fn get_utf16(value : &str) -> Vec<u16> {
@@ -342,7 +400,7 @@ fn main() {
 			service.stop();
         },
         _ => {
-
+        	service.register();
         }
     }
 }
