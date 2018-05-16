@@ -1,6 +1,9 @@
 extern crate libc;
 
 #[macro_use]
+extern crate clap;
+
+#[macro_use]
 #[cfg(windows)]
 extern crate winapi;
 
@@ -8,6 +11,7 @@ use winapi::um::winsvc::*;
 use winapi::um::winnt::*;
 use winapi::um::winbase::*;
 use winapi::um::libloaderapi::*;
+use winapi::um::errhandlingapi::*;
 use winapi::shared::minwindef::*;
 
 use std::env;
@@ -15,8 +19,11 @@ use std::ptr;
 use std::ffi::{OsStr,CString};
 use std::os::windows::ffi::OsStrExt;
 use std::iter::once;
+use std::{thread, time};
 
-use libc::{c_int, c_char, c_void};
+use libc::{c_int, c_char};
+
+use clap::App;
 
 #[allow(non_camel_case_types, non_snake_case)]
 
@@ -28,10 +35,15 @@ pub type PSERVICE_DESCRIPTION_W = *mut SERVICE_DESCRIPTION_W;
 
 extern "system" {
 	pub fn ChangeServiceConfig2W(
-       hService: SC_HANDLE,
-       dwInfoLevel: DWORD,
-       lpInfo: LPVOID,
-   ) -> BOOL;
+		hService: SC_HANDLE,
+		dwInfoLevel: DWORD,
+		lpInfo: LPVOID,
+	) -> BOOL;
+    pub fn StartServiceW(
+		hService: SC_HANDLE,
+		dwNumServiceArgs: DWORD,
+		lpServiceArgVectors: *mut LPCWSTR,
+	) -> BOOL;
 }
 
 pub enum NtService {}
@@ -43,7 +55,7 @@ extern {
 }
 
 pub struct Service {
-    ctx: *mut NtService,
+    //ctx: *mut NtService,
     pub service_name: String,
     pub display_name: String,
     pub description: String,
@@ -56,10 +68,14 @@ pub struct Service {
     pub dependencies: String,
     pub account_name: String,
     pub password: String,
+    pub service_status: SERVICE_STATUS,
+    pub status_handle: SERVICE_STATUS_HANDLE,
+    pub controls_accepted: DWORD,
 }
 
 impl Service {
     pub fn new(service_name: &str, display_name: &str, description: &str) -> Option<Service> {
+    	/*
         let raw_service = unsafe {
 			let service_name = CString::new(service_name).unwrap();
 			let display_name = CString::new(display_name).unwrap();
@@ -73,9 +89,9 @@ impl Service {
     	unsafe {
     		NtService_ProcessCommandLine(raw_service, c_args.len() as c_int, c_args.as_ptr());
     	};
+    	*/
 
         Some(Service {
-        	ctx: raw_service,
         	service_name: service_name.to_string(),
         	display_name: display_name.to_string(),
         	description: description.to_string(),
@@ -88,6 +104,17 @@ impl Service {
         	dependencies: "".to_string(),
         	account_name: "".to_string(),
         	password: "".to_string(),
+        	service_status: SERVICE_STATUS {
+				dwServiceType: SERVICE_WIN32_OWN_PROCESS,
+				dwCurrentState: SERVICE_STOPPED,
+				dwControlsAccepted: 0,
+				dwWin32ExitCode: 0,
+				dwServiceSpecificExitCode: 0,
+				dwCheckPoint: 0,
+				dwWaitHint: 0
+			},
+			status_handle: ptr::null_mut(),
+			controls_accepted: SERVICE_ACCEPT_STOP,
         })
     }
 
@@ -97,6 +124,7 @@ impl Service {
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
+				print!("OpenSCManagerW: {}", get_last_error_text());
 				return false;
 			}
 
@@ -109,12 +137,15 @@ impl Service {
 				self.start_type, self.error_control,
 				get_utf16(filename.as_str()).as_ptr(),
 				ptr::null_mut(),
-				&mut tag_id,
+				ptr::null_mut(), //&mut tag_id,
 				ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
 
 			if h_service.is_null() {
+				print!("CreateServiceW: {}", get_last_error_text());
 				return false;
 			}
+
+			self.tag_id = tag_id;
 
 			let mut sd = SERVICE_DESCRIPTION_W {
 				lpDescription: get_utf16(self.description.as_str()).as_mut_ptr(),
@@ -130,14 +161,127 @@ impl Service {
     }
 
 	pub fn delete(&mut self) -> bool {
-    	true
+		unsafe {
+			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
+
+			if sc_manager.is_null() {
+				print!("OpenSCManagerW: {}", get_last_error_text());
+				return false;
+			}
+
+			let h_service = OpenServiceW(sc_manager,
+				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
+
+			if h_service.is_null() {
+				print!("OpenServiceW: {}", get_last_error_text());
+				return false;
+			}
+
+			if ControlService(sc_manager, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
+				while QueryServiceStatus(h_service, &mut self.service_status) != 0 {
+					if self.service_status.dwCurrentState != SERVICE_STOP_PENDING {
+						break;
+					}
+					thread::sleep(time::Duration::from_millis(250));
+				}
+			} else {
+				return false;
+			}
+
+			if DeleteService(h_service) != 0 {
+				print!("DeleteService: {}", get_last_error_text());
+			}
+
+			CloseServiceHandle(h_service);
+			CloseServiceHandle(sc_manager);
+
+	    	true
+	    }
+    }
+
+    pub fn start(&mut self) -> bool {
+		unsafe {
+			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
+
+			if sc_manager.is_null() {
+				print!("OpenSCManagerW: {}", get_last_error_text());
+				return false;
+			}
+
+			let h_service = OpenServiceW(sc_manager,
+				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
+
+			if h_service.is_null() {
+				print!("OpenServiceW: {}", get_last_error_text());
+				return false;
+			}
+
+			if StartServiceW(h_service, 0, ptr::null_mut()) != 0 {
+				while QueryServiceStatus(h_service, &mut self.service_status) != 0 {
+					if self.service_status.dwCurrentState != SERVICE_START_PENDING {
+						break;
+					}
+					thread::sleep(time::Duration::from_millis(250));
+				}
+			}
+
+			if self.service_status.dwCurrentState != SERVICE_RUNNING {
+				println!("failed to start service");
+				return false;	
+			}
+
+			CloseServiceHandle(h_service);
+			CloseServiceHandle(sc_manager);
+
+	    	true
+	    }
+    }
+
+    pub fn stop(&mut self) -> bool {
+		unsafe {
+			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
+
+			if sc_manager.is_null() {
+				print!("OpenSCManagerW: {}", get_last_error_text());
+				return false;
+			}
+
+			let h_service = OpenServiceW(sc_manager,
+				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
+
+			if h_service.is_null() {
+				print!("OpenServiceW: {}", get_last_error_text());
+				return false;
+			}
+
+			if ControlService(sc_manager, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
+				while QueryServiceStatus(h_service, &mut self.service_status) != 0 {
+					if self.service_status.dwCurrentState != SERVICE_STOP_PENDING {
+						break;
+					}
+					thread::sleep(time::Duration::from_millis(250));
+				}
+			} else {
+				println!("failed to stop service");
+				return false;
+			}
+
+			if self.service_status.dwCurrentState != SERVICE_STOPPED {
+				println!("failed to stop service");
+				return false;	
+			}
+
+			CloseServiceHandle(h_service);
+			CloseServiceHandle(sc_manager);
+
+	    	true
+	    }
     }
 }
 
 impl Drop for Service {
 	fn drop(&mut self) {
         unsafe {
-            NtService_Free(self.ctx);
         }
     }
 }
@@ -167,9 +311,38 @@ fn get_username() -> String {
     }
 }
 
+fn get_last_error_text() -> String {
+	unsafe {
+		let mut message = [0u16; 512];
+		let length = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, ptr::null(), GetLastError(),
+			0, message.as_mut_ptr(), message.len() as u32, ptr::null_mut());
+		String::from_utf16(&message[0..length as usize]).unwrap()
+	}
+}
+
 fn main() {
-	let username = get_username();
-	let filename = get_filename();
-	println!("username: {} filename: {}", username, filename);
-	let service = Service::new("foobar", "FooBar Service", "This is the FooBar service");
+    let yaml = load_yaml!("cli.yml");
+    let app = App::from_yaml(yaml);
+    let matches = app.version(crate_version!()).get_matches();
+    let cmd = matches.value_of("cmd").unwrap_or("").to_string();
+
+	let mut service = Service::new("foobar", "FooBar Service", "This is the FooBar service").unwrap();
+
+    match cmd.as_str() {
+        "create" => {
+			service.create();
+        },
+        "delete" => {
+			service.delete();
+        },
+        "start" => {
+			service.start();
+        },
+        "stop" => {
+			service.stop();
+        },
+        _ => {
+
+        }
+    }
 }

@@ -11,9 +11,10 @@ build = "build.rs"
 
 [dependencies]
 libc = "0"
+clap = { version = "2.31", features = ["yaml"] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winbase", "winuser", "winsvc", "libloaderapi"] }
+winapi = { version = "0.3", features = ["winbase", "winuser", "winsvc", "libloaderapi", "errhandlingapi"] }
 
 [build-dependencies]
 gcc = "0"
