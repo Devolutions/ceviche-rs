@@ -85,13 +85,14 @@ impl Service {
 
     pub fn create(&mut self) -> Result<(), Error> {
     	unsafe {
-			let filename = get_filename();
-			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
+			let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
 				print!("OpenSCManager: {}", get_last_error_text());
 				return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
 			}
+
+			let filename = get_filename();
 
 			let mut tag_id: DWORD = 0;
 
@@ -127,15 +128,14 @@ impl Service {
 
 	pub fn delete(&mut self) -> Result<(), Error> {
 		unsafe {
-			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
+			let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
 				print!("OpenSCManager: {}", get_last_error_text());
 				return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
 			}
 
-			let h_service = OpenServiceW(sc_manager,
-				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
+			let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
 
 			if h_service.is_null() {
 				print!("OpenService: {}", get_last_error_text());
@@ -165,15 +165,14 @@ impl Service {
 
     pub fn start(&mut self) -> Result<(), Error> {
 		unsafe {
-			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
+			let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
 				print!("OpenSCManager: {}", get_last_error_text());
 				return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
 			}
 
-			let h_service = OpenServiceW(sc_manager,
-				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
+			let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
 
 			if h_service.is_null() {
 				print!("OpenService: {}", get_last_error_text());
@@ -203,15 +202,14 @@ impl Service {
 
     pub fn stop(&mut self) -> Result<(), Error> {
 		unsafe {
-			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
+			let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
 				print!("OpenSCManager: {}", get_last_error_text());
 				return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
 			}
 
-			let h_service = OpenServiceW(sc_manager,
-				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
+			let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
 
 			if h_service.is_null() {
 				print!("OpenService: {}", get_last_error_text());
@@ -242,8 +240,7 @@ impl Service {
 	    }
     }
 
-    pub fn register(&mut self) -> Result<(), Error>
-	{
+    pub fn register(&mut self) -> Result<(), Error> {
 		unsafe {
 			let service_name = get_utf16(self.service_name.as_str());
 
@@ -268,6 +265,18 @@ impl Drop for Service {
 	fn drop(&mut self) {
 
     }
+}
+
+fn open_sc_manager(desired_access: DWORD) -> SC_HANDLE {
+	unsafe {
+		OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), desired_access)
+	}
+}
+
+fn open_service(sc_manager: SC_HANDLE, service_name: &str, desired_access: DWORD) -> SC_HANDLE {
+	unsafe {
+		OpenServiceW(sc_manager, get_utf16(service_name).as_ptr(), SERVICE_ALL_ACCESS)
+	}
 }
 
 fn set_service_status(status_handle: SERVICE_STATUS_HANDLE, current_state: DWORD, wait_hint: DWORD) {
