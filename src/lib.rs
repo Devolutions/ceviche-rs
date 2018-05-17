@@ -100,7 +100,7 @@ impl Service {
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
-				print!("OpenSCManagerW: {}", get_last_error_text());
+				print!("OpenSCManager: {}", get_last_error_text());
 				return false;
 			}
 
@@ -117,7 +117,7 @@ impl Service {
 				ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
 
 			if h_service.is_null() {
-				print!("CreateServiceW: {}", get_last_error_text());
+				print!("CreateService: {}", get_last_error_text());
 				return false;
 			}
 
@@ -141,7 +141,7 @@ impl Service {
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
-				print!("OpenSCManagerW: {}", get_last_error_text());
+				print!("OpenSCManager: {}", get_last_error_text());
 				return false;
 			}
 
@@ -149,7 +149,7 @@ impl Service {
 				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
 
 			if h_service.is_null() {
-				print!("OpenServiceW: {}", get_last_error_text());
+				print!("OpenService: {}", get_last_error_text());
 				return false;
 			}
 
@@ -180,7 +180,7 @@ impl Service {
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
-				print!("OpenSCManagerW: {}", get_last_error_text());
+				print!("OpenSCManager: {}", get_last_error_text());
 				return false;
 			}
 
@@ -188,7 +188,7 @@ impl Service {
 				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
 
 			if h_service.is_null() {
-				print!("OpenServiceW: {}", get_last_error_text());
+				print!("OpenService: {}", get_last_error_text());
 				return false;
 			}
 
@@ -203,7 +203,7 @@ impl Service {
 
 			if self.service_status.dwCurrentState != SERVICE_RUNNING {
 				println!("failed to start service");
-				return false;	
+				return false;
 			}
 
 			CloseServiceHandle(h_service);
@@ -218,7 +218,7 @@ impl Service {
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
-				print!("OpenSCManagerW: {}", get_last_error_text());
+				print!("OpenSCManager: {}", get_last_error_text());
 				return false;
 			}
 
@@ -226,7 +226,7 @@ impl Service {
 				get_utf16(self.service_name.as_str()).as_ptr(), SERVICE_ALL_ACCESS);
 
 			if h_service.is_null() {
-				print!("OpenServiceW: {}", get_last_error_text());
+				print!("OpenService: {}", get_last_error_text());
 				return false;
 			}
 
@@ -254,7 +254,7 @@ impl Service {
 	    }
     }
 
-    fn register(&mut self) -> Result<(), Error>
+    pub fn register(&mut self) -> Result<(), Error>
 	{
 		unsafe {
 			let service_name = get_utf16(self.service_name.as_str());
@@ -269,7 +269,7 @@ impl Service {
 
 			match StartServiceCtrlDispatcherW(*service_table.as_ptr())
 			{
-				0 => Err(Error::new(ErrorKind::Other, "StartServiceCtrlDispatcherW")),
+				0 => Err(Error::new(ErrorKind::Other, "StartServiceCtrlDispatcher")),
 				_ => Ok(())
 			}
 		}
@@ -319,11 +319,11 @@ fn service_handler(control: DWORD, event_type: DWORD, event_data: LPVOID, contex
 	0
 }
 
-fn get_utf16(value : &str) -> Vec<u16> {
+pub fn get_utf16(value : &str) -> Vec<u16> {
 	OsStr::new(value).encode_wide().chain(once(0)).collect()
 }
 
-fn get_filename() -> String {
+pub fn get_filename() -> String {
 	unsafe {
 		let mut filename: [u16; MAX_PATH] = [0; MAX_PATH];
 		let nSize = GetModuleFileNameW(ptr::null_mut(),
@@ -333,7 +333,7 @@ fn get_filename() -> String {
 	}
 }
 
-fn get_username() -> String {
+pub fn get_username() -> String {
     unsafe {
         let mut size = 0;
         GetUserNameW(ptr::null_mut(), &mut size);
@@ -344,38 +344,11 @@ fn get_username() -> String {
     }
 }
 
-fn get_last_error_text() -> String {
+pub fn get_last_error_text() -> String {
 	unsafe {
 		let mut message = [0u16; 512];
 		let length = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, ptr::null(), GetLastError(),
 			0, message.as_mut_ptr(), message.len() as u32, ptr::null_mut());
 		String::from_utf16(&message[0..length as usize]).unwrap()
 	}
-}
-
-fn main() {
-    let yaml = load_yaml!("cli.yml");
-    let app = App::from_yaml(yaml);
-    let matches = app.version(crate_version!()).get_matches();
-    let cmd = matches.value_of("cmd").unwrap_or("").to_string();
-
-	let mut service = Service::new("foobar", "FooBar Service", "This is the FooBar service").unwrap();
-
-    match cmd.as_str() {
-        "create" => {
-			service.create();
-        },
-        "delete" => {
-			service.delete();
-        },
-        "start" => {
-			service.start();
-        },
-        "stop" => {
-			service.stop();
-        },
-        _ => {
-        	service.register();
-        }
-    }
 }
