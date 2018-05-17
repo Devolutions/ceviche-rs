@@ -1,7 +1,3 @@
-extern crate libc;
-
-#[macro_use]
-extern crate clap;
 
 #[macro_use]
 #[cfg(windows)]
@@ -14,19 +10,12 @@ use winapi::um::libloaderapi::*;
 use winapi::um::errhandlingapi::*;
 use winapi::shared::minwindef::*;
 
-use std::env;
 use std::ptr;
-use std::ffi::{OsStr,CString};
-use std::os::windows::ffi::OsStrExt;
+use std::ffi::{OsStr};
 use std::iter::once;
 use std::{thread, time};
 use std::io::{Error, ErrorKind};
-
-use libc::{c_int, c_char};
-
-use clap::App;
-
-#[allow(non_camel_case_types, non_snake_case)]
+use std::os::windows::ffi::OsStrExt;
 
 #[repr(C)]
 STRUCT!{struct SERVICE_DESCRIPTION_W {
@@ -94,14 +83,14 @@ impl Service {
         })
     }
 
-    pub fn create(&mut self) -> bool {
+    pub fn create(&mut self) -> Result<(), Error> {
     	unsafe {
 			let filename = get_filename();
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
 				print!("OpenSCManager: {}", get_last_error_text());
-				return false;
+				return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
 			}
 
 			let mut tag_id: DWORD = 0;
@@ -118,7 +107,7 @@ impl Service {
 
 			if h_service.is_null() {
 				print!("CreateService: {}", get_last_error_text());
-				return false;
+				return Err(Error::new(ErrorKind::Other, "CreateService"));
 			}
 
 			self.tag_id = tag_id;
@@ -132,17 +121,17 @@ impl Service {
 
 			CloseServiceHandle(sc_manager);
 
-			true
+			Ok(())
 		}
     }
 
-	pub fn delete(&mut self) -> bool {
+	pub fn delete(&mut self) -> Result<(), Error> {
 		unsafe {
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
 				print!("OpenSCManager: {}", get_last_error_text());
-				return false;
+				return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
 			}
 
 			let h_service = OpenServiceW(sc_manager,
@@ -150,7 +139,7 @@ impl Service {
 
 			if h_service.is_null() {
 				print!("OpenService: {}", get_last_error_text());
-				return false;
+				return Err(Error::new(ErrorKind::Other, "OpenService"));
 			}
 
 			if ControlService(sc_manager, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
@@ -160,28 +149,27 @@ impl Service {
 					}
 					thread::sleep(time::Duration::from_millis(250));
 				}
-			} else {
-				return false;
 			}
 
 			if DeleteService(h_service) != 0 {
 				print!("DeleteService: {}", get_last_error_text());
+				return Err(Error::new(ErrorKind::Other, "DeleteService"));
 			}
 
 			CloseServiceHandle(h_service);
 			CloseServiceHandle(sc_manager);
 
-	    	true
+	    	Ok(())
 	    }
     }
 
-    pub fn start(&mut self) -> bool {
+    pub fn start(&mut self) -> Result<(), Error> {
 		unsafe {
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
 				print!("OpenSCManager: {}", get_last_error_text());
-				return false;
+				return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
 			}
 
 			let h_service = OpenServiceW(sc_manager,
@@ -189,7 +177,7 @@ impl Service {
 
 			if h_service.is_null() {
 				print!("OpenService: {}", get_last_error_text());
-				return false;
+				return Err(Error::new(ErrorKind::Other, "OpenService"));
 			}
 
 			if StartServiceW(h_service, 0, ptr::null_mut()) != 0 {
@@ -203,23 +191,23 @@ impl Service {
 
 			if self.service_status.dwCurrentState != SERVICE_RUNNING {
 				println!("failed to start service");
-				return false;
+				return Err(Error::new(ErrorKind::Other, "Failed to start service"));
 			}
 
 			CloseServiceHandle(h_service);
 			CloseServiceHandle(sc_manager);
 
-	    	true
+	    	Ok(())
 	    }
     }
 
-    pub fn stop(&mut self) -> bool {
+    pub fn stop(&mut self) -> Result<(), Error> {
 		unsafe {
 			let sc_manager = OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), SC_MANAGER_ALL_ACCESS);
 
 			if sc_manager.is_null() {
 				print!("OpenSCManager: {}", get_last_error_text());
-				return false;
+				return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
 			}
 
 			let h_service = OpenServiceW(sc_manager,
@@ -227,7 +215,7 @@ impl Service {
 
 			if h_service.is_null() {
 				print!("OpenService: {}", get_last_error_text());
-				return false;
+				return Err(Error::new(ErrorKind::Other, "OpenService"));
 			}
 
 			if ControlService(sc_manager, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
@@ -239,18 +227,18 @@ impl Service {
 				}
 			} else {
 				println!("failed to stop service");
-				return false;
+				return Err(Error::new(ErrorKind::Other, "ControlService"));
 			}
 
 			if self.service_status.dwCurrentState != SERVICE_STOPPED {
 				println!("failed to stop service");
-				return false;	
+				return Err(Error::new(ErrorKind::Other, "Failed to stop service"));
 			}
 
 			CloseServiceHandle(h_service);
 			CloseServiceHandle(sc_manager);
 
-	    	true
+	    	Ok(())
 	    }
     }
 
@@ -278,8 +266,7 @@ impl Service {
 
 impl Drop for Service {
 	fn drop(&mut self) {
-        unsafe {
-        }
+
     }
 }
 
@@ -326,7 +313,7 @@ pub fn get_utf16(value : &str) -> Vec<u16> {
 pub fn get_filename() -> String {
 	unsafe {
 		let mut filename: [u16; MAX_PATH] = [0; MAX_PATH];
-		let nSize = GetModuleFileNameW(ptr::null_mut(),
+		let size = GetModuleFileNameW(ptr::null_mut(),
 			filename.as_mut_ptr(),
 			filename.len() as DWORD);
 		String::from_utf16(&filename).unwrap()
