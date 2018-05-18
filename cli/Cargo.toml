@@ -14,6 +14,8 @@ path = "src/main.rs"
 
 [dependencies]
 libc = "0"
+log = "0.4"
+log4rs = "0.8"
 clap = { version = "2.31", features = ["yaml"] }
 
 [target.'cfg(windows)'.dependencies]
