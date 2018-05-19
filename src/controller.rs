@@ -10,8 +10,12 @@ use std::ptr;
 use std::ffi::{OsStr};
 use std::iter::once;
 use std::{thread, time};
+use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 use std::os::windows::ffi::OsStrExt;
+
+use factory::Factory;
+use service::Service;
 
 #[repr(C)]
 STRUCT!{struct SERVICE_DESCRIPTION_W {
@@ -33,6 +37,7 @@ extern "system" {
 }
 
 pub struct Controller {
+	pub factory: Factory,
     pub service_name: String,
     pub display_name: String,
     pub description: String,
@@ -51,8 +56,9 @@ pub struct Controller {
 }
 
 impl Controller {
-    pub fn new(service_name: &str, display_name: &str, description: &str) -> Option<Controller> {
+    pub fn new(factory: Factory, service_name: &str, display_name: &str, description: &str) -> Option<Controller> {
         Some(Controller {
+			factory: factory,
         	service_name: service_name.to_string(),
         	display_name: display_name.to_string(),
         	description: description.to_string(),
@@ -292,6 +298,7 @@ fn set_service_status(status_handle: SERVICE_STATUS_HANDLE, current_state: DWORD
 
 unsafe extern "system"
 fn service_main(argc: DWORD, argv: *mut LPWSTR) {
+	let args = get_args(argc, argv);
 	let service_name = get_utf16("foobar");
 	let ctrl_handle = RegisterServiceCtrlHandlerExW(service_name.as_ptr(), Some(service_handler), ptr::null_mut());
 	set_service_status(ctrl_handle, SERVICE_START_PENDING, 0);
@@ -309,6 +316,14 @@ fn service_handler(control: DWORD, event_type: DWORD, event_data: LPVOID, contex
 		_ => {}
 	};
 	0
+}
+
+unsafe fn get_args(argc: DWORD, argv: *mut LPWSTR) -> Vec<String> {
+	let args: Vec<String> = Vec::new();
+	for argi in 0..argc {
+		unimplemented!()
+	}
+	return args;
 }
 
 pub fn get_utf16(value : &str) -> Vec<u16> {
