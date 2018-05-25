@@ -1,22 +1,23 @@
-
 use std::collections::HashMap;
 use std::env;
 
 use service::Service;
 
 pub struct Factory {
-    services: HashMap<String, Box<FnMut(Vec<String>) -> Box<Service>>>
+    services: HashMap<String, Box<FnMut(Vec<String>) -> Box<Service>>>,
 }
 
 impl Factory {
     pub fn new() -> Self {
         Factory {
-            services: HashMap::new()
+            services: HashMap::new(),
         }
     }
 
     pub fn register<F>(&mut self, name: &str, callback: F)
-        where F: FnMut(Vec<String>) -> Box<Service> +'static {
+    where
+        F: FnMut(Vec<String>) -> Box<Service> + 'static,
+    {
         self.services.insert(name.to_string(), Box::new(callback));
     }
 

@@ -37,7 +37,9 @@ fn main() {
     let mut factory = Factory::new();
 
     factory.register(SERVICE_NAME, move |args| {
-        Box::new(MyService { service_name: SERVICE_NAME.to_string() })
+        Box::new(MyService {
+            service_name: SERVICE_NAME.to_string(),
+        })
     });
 
     /*
@@ -49,23 +51,23 @@ fn main() {
     }
     */
 
-	let mut controller = Controller::new(factory, SERVICE_NAME, DISPLAY_NAME, DESCRIPTION).unwrap();
+    let mut controller = Controller::new(factory, SERVICE_NAME, DISPLAY_NAME, DESCRIPTION).unwrap();
 
     match cmd.as_str() {
         "create" => {
-			controller.create().unwrap();
-        },
+            controller.create().unwrap();
+        }
         "delete" => {
-			controller.delete().unwrap();
-        },
+            controller.delete().unwrap();
+        }
         "start" => {
-			controller.start().unwrap();
-        },
+            controller.start().unwrap();
+        }
         "stop" => {
-			controller.stop().unwrap();
-        },
+            controller.stop().unwrap();
+        }
         _ => {
-        	controller.register().unwrap();
+            controller.register().unwrap();
         }
     }
 }
