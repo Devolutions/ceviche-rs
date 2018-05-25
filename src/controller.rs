@@ -1,9 +1,12 @@
+
+use winapi;
 use winapi::um::winsvc::*;
 use winapi::um::winnt::*;
 use winapi::um::winbase::*;
 use winapi::um::libloaderapi::*;
 use winapi::um::errhandlingapi::*;
 use winapi::shared::minwindef::*;
+use winapi::shared::winerror::*;
 
 use std::ptr;
 use std::ffi::OsStr;
@@ -16,10 +19,12 @@ use std::os::windows::ffi::OsStrExt;
 use factory::Factory;
 use service::Service;
 
-#[repr(C)]
-STRUCT!{struct SERVICE_DESCRIPTION_W {
+STRUCT!{#[allow(non_snake_case)]
+	struct SERVICE_DESCRIPTION_W {
     lpDescription: LPWSTR,
 }}
+
+#[allow(non_camel_case_types)]
 pub type PSERVICE_DESCRIPTION_W = *mut SERVICE_DESCRIPTION_W;
 
 extern "system" {
@@ -56,8 +61,8 @@ impl Controller {
         service_name: &str,
         display_name: &str,
         description: &str,
-    ) -> Option<Controller> {
-        Some(Controller {
+    ) -> Controller {
+        Controller {
             factory: factory,
             service_name: service_name.to_string(),
             display_name: display_name.to_string(),
@@ -82,7 +87,7 @@ impl Controller {
             },
             status_handle: ptr::null_mut(),
             controls_accepted: SERVICE_ACCEPT_STOP,
-        })
+        }
     }
 
     pub fn create(&mut self) -> Result<(), Error> {
@@ -95,7 +100,6 @@ impl Controller {
             }
 
             let filename = get_filename();
-
             let mut tag_id: DWORD = 0;
 
             let h_service = CreateServiceW(
@@ -108,7 +112,7 @@ impl Controller {
                 self.error_control,
                 get_utf16(filename.as_str()).as_ptr(),
                 ptr::null_mut(),
-                ptr::null_mut(), //&mut tag_id,
+                &mut tag_id,
                 ptr::null_mut(),
                 ptr::null_mut(),
                 ptr::null_mut(),
@@ -125,9 +129,8 @@ impl Controller {
                 lpDescription: get_utf16(self.description.as_str()).as_mut_ptr(),
             };
 
-            //let sd_ptr: *mut c_void = &mut sd;
-            //let success = ChangeServiceConfig2W(ptr::null_mut(), 0, &*sd as *mut winapi::ctypes::c_void);
-
+            let p_sd = &mut sd as *mut _ as *mut winapi::ctypes::c_void;
+            ChangeServiceConfig2W(h_service, SERVICE_CONFIG_DESCRIPTION, p_sd);
             CloseServiceHandle(sc_manager);
 
             Ok(())
@@ -281,7 +284,7 @@ fn open_service(sc_manager: SC_HANDLE, service_name: &str, desired_access: DWORD
         OpenServiceW(
             sc_manager,
             get_utf16(service_name).as_ptr(),
-            SERVICE_ALL_ACCESS,
+            desired_access,
         )
     }
 }
@@ -306,7 +309,8 @@ fn set_service_status(
 }
 
 unsafe extern "system" fn service_main(argc: DWORD, argv: *mut LPWSTR) {
-    let args = get_args(argc, argv);
+    // get_args is currently unimplemented, the service will panic on start.
+    // let args = get_args(argc, argv);
     let service_name = get_utf16("foobar");
     let ctrl_handle = RegisterServiceCtrlHandlerExW(
         service_name.as_ptr(),
@@ -321,17 +325,17 @@ unsafe extern "system" fn service_main(argc: DWORD, argv: *mut LPWSTR) {
 
 unsafe extern "system" fn service_handler(
     control: DWORD,
-    event_type: DWORD,
-    event_data: LPVOID,
-    context: LPVOID,
+    _event_type: DWORD,
+    _event_data: LPVOID,
+    _context: LPVOID,
 ) -> DWORD {
-    match control {
-        SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
+	match control {
+		SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
             //set_service_status(ctrl_handle, SERVICE_STOP_PENDING, 0);
-        }
-        _ => {}
-    };
-    0
+            return 0;
+            },
+        _ => return ERROR_CALL_NOT_IMPLEMENTED,
+	};
 }
 
 unsafe fn get_args(argc: DWORD, argv: *mut LPWSTR) -> Vec<String> {
@@ -348,13 +352,13 @@ pub fn get_utf16(value: &str) -> Vec<u16> {
 
 pub fn get_filename() -> String {
     unsafe {
-        let mut filename: [u16; MAX_PATH] = [0; MAX_PATH];
-        let size = GetModuleFileNameW(
+        let mut filename = [0u16; MAX_PATH];
+        let _size = GetModuleFileNameW(
             ptr::null_mut(),
             filename.as_mut_ptr(),
             filename.len() as DWORD,
         );
-        String::from_utf16(&filename).unwrap()
+        String::from_utf16(&filename).unwrap_or_else(|_| String::from(""))
     }
 }
 
@@ -365,7 +369,7 @@ pub fn get_username() -> String {
         let mut username = Vec::with_capacity(size as usize);
         GetUserNameW(username.as_mut_ptr(), &mut size);
         username.set_len(size as usize);
-        String::from_utf16(&username).unwrap()
+        String::from_utf16(&username).unwrap_or_else(|_| String::from(""))
     }
 }
 
@@ -381,6 +385,6 @@ pub fn get_last_error_text() -> String {
             message.len() as u32,
             ptr::null_mut(),
         );
-        String::from_utf16(&message[0..length as usize]).unwrap()
+        String::from_utf16(&message[0..length as usize]).unwrap_or_else(|_| String::from(""))
     }
 }

@@ -12,4 +12,4 @@ description = "Rust daemon/service wrapper"
 clap = { version = "2.31", features = ["yaml"] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winbase", "winuser", "winsvc", "libloaderapi", "errhandlingapi"] }
+winapi = { version = "0.3", features = ["winbase", "winerror", "winuser", "winsvc", "libloaderapi", "errhandlingapi"] }
