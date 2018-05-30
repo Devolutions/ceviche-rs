@@ -1,4 +1,5 @@
 
+use widestring::WideCString;
 use winapi;
 use winapi::um::winsvc::*;
 use winapi::um::winnt::*;
@@ -12,12 +13,9 @@ use std::ptr;
 use std::ffi::OsStr;
 use std::iter::once;
 use std::{thread, time};
-use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 use std::os::windows::ffi::OsStrExt;
-
-use factory::Factory;
-use service::Service;
+use std::sync::mpsc;
 
 STRUCT!{#[allow(non_snake_case)]
 	struct SERVICE_DESCRIPTION_W {
@@ -36,8 +34,9 @@ extern "system" {
     ) -> BOOL;
 }
 
+pub type ServiceMainFn = fn(mpsc::Receiver<DWORD>, Vec<String>, bool) -> u32;
+
 pub struct Controller {
-    pub factory: Factory,
     pub service_name: String,
     pub display_name: String,
     pub description: String,
@@ -57,13 +56,11 @@ pub struct Controller {
 
 impl Controller {
     pub fn new(
-        factory: Factory,
         service_name: &str,
         display_name: &str,
         description: &str,
     ) -> Controller {
         Controller {
-            factory: factory,
             service_name: service_name.to_string(),
             display_name: display_name.to_string(),
             description: description.to_string(),
@@ -100,7 +97,7 @@ impl Controller {
             }
 
             let filename = get_filename();
-            let mut tag_id: DWORD = 0;
+            let tag_id = 0;
 
             let h_service = CreateServiceW(
                 sc_manager,
@@ -112,7 +109,7 @@ impl Controller {
                 self.error_control,
                 get_utf16(filename.as_str()).as_ptr(),
                 ptr::null_mut(),
-                &mut tag_id,
+                ptr::null_mut(),
                 ptr::null_mut(),
                 ptr::null_mut(),
                 ptr::null_mut(),
@@ -251,14 +248,14 @@ impl Controller {
         }
     }
 
-    pub fn register(&mut self) -> Result<(), Error> {
+    pub fn register(&mut self, service_main_wrapper: extern "system" fn(DWORD, *mut LPWSTR)) -> Result<(), Error> {
         unsafe {
             let service_name = get_utf16(self.service_name.as_str());
 
             let service_table: &[*const SERVICE_TABLE_ENTRYW] = &[
                 &SERVICE_TABLE_ENTRYW {
                     lpServiceName: service_name.as_ptr(),
-                    lpServiceProc: Some(service_main),
+                    lpServiceProc: Some(service_main_wrapper),
                 },
                 ptr::null(),
             ];
@@ -308,42 +305,33 @@ fn set_service_status(
     }
 }
 
-unsafe extern "system" fn service_main(argc: DWORD, argv: *mut LPWSTR) {
-    // get_args is currently unimplemented, the service will panic on start.
-    // let args = get_args(argc, argv);
-    let service_name = get_utf16("foobar");
-    let ctrl_handle = RegisterServiceCtrlHandlerExW(
-        service_name.as_ptr(),
-        Some(service_handler),
-        ptr::null_mut(),
-    );
-    set_service_status(ctrl_handle, SERVICE_START_PENDING, 0);
-    set_service_status(ctrl_handle, SERVICE_RUNNING, 0);
-    thread::sleep(time::Duration::from_millis(5000)); // "run" for 5 seconds
-    set_service_status(ctrl_handle, SERVICE_STOPPED, 0);
-}
-
 unsafe extern "system" fn service_handler(
     control: DWORD,
     _event_type: DWORD,
     _event_data: LPVOID,
-    _context: LPVOID,
+    context: LPVOID,
 ) -> DWORD {
+    let tx = context as *mut mpsc::Sender<DWORD>;
+
 	match control {
 		SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
-            //set_service_status(ctrl_handle, SERVICE_STOP_PENDING, 0);
+            let _result = (*tx).send(control);
             return 0;
             },
         _ => return ERROR_CALL_NOT_IMPLEMENTED,
 	};
 }
 
-unsafe fn get_args(argc: DWORD, argv: *mut LPWSTR) -> Vec<String> {
-    let args: Vec<String> = Vec::new();
-    for argi in 0..argc {
-        unimplemented!()
+fn get_args(argc: DWORD, argv: *mut LPWSTR) -> Vec<String> {
+    let mut args = Vec::new();
+    for i in 0..argc {
+        unsafe {
+            let s = *argv.offset(i as isize);
+            let widestr = WideCString::from_ptr_str(s);
+            args.push(widestr.to_string_lossy());
+        }
     }
-    return args;
+    args
 }
 
 pub fn get_utf16(value: &str) -> Vec<u16> {
@@ -387,4 +375,31 @@ pub fn get_last_error_text() -> String {
         );
         String::from_utf16(&message[0..length as usize]).unwrap_or_else(|_| String::from(""))
     }
+}
+
+#[macro_export]
+macro_rules! Service { ( $name:expr, $function:ident ) => {
+    extern crate winapi;
+    use winapi::shared::minwindef::DWORD;
+    use winapi::um::winnt::LPWSTR;
+    use std::sync::mpsc;
+
+    extern "system" fn service_main_wrapper(argc: DWORD, argv: *mut LPWSTR) {
+        dispatch($function, $name, argc, argv);
+    }
+}}
+
+pub fn dispatch(service_main : ServiceMainFn, name: &str, argc: DWORD, argv: *mut LPWSTR) {
+    let args = get_args(argc, argv);
+    let service_name = get_utf16(name);
+    let (mut tx, rx) = mpsc::channel();
+    let ctrl_handle = unsafe {RegisterServiceCtrlHandlerExW(
+        service_name.as_ptr(),
+        Some(service_handler),
+        &mut tx as *mut _ as LPVOID,
+    )};
+    set_service_status(ctrl_handle, SERVICE_START_PENDING, 0);
+    set_service_status(ctrl_handle, SERVICE_RUNNING, 0);
+    service_main(rx, args, false);
+    set_service_status(ctrl_handle, SERVICE_STOPPED, 0);
 }
