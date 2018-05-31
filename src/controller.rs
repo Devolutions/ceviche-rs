@@ -17,6 +17,8 @@ use std::io::{Error, ErrorKind};
 use std::os::windows::ffi::OsStrExt;
 use std::sync::mpsc;
 
+use ServiceEvent;
+
 STRUCT!{#[allow(non_snake_case)]
 	struct SERVICE_DESCRIPTION_W {
     lpDescription: LPWSTR,
@@ -34,7 +36,7 @@ extern "system" {
     ) -> BOOL;
 }
 
-pub type ServiceMainFn = fn(mpsc::Receiver<DWORD>, Vec<String>, bool) -> u32;
+pub type ServiceMainFn = fn(mpsc::Receiver<ServiceEvent>, Vec<String>, bool) -> u32;
 
 pub struct Controller {
     pub service_name: String,
@@ -311,11 +313,11 @@ unsafe extern "system" fn service_handler(
     _event_data: LPVOID,
     context: LPVOID,
 ) -> DWORD {
-    let tx = context as *mut mpsc::Sender<DWORD>;
+    let tx = context as *mut mpsc::Sender<ServiceEvent>;
 
 	match control {
 		SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
-            let _result = (*tx).send(control);
+            let _ = (*tx).send(ServiceEvent::Stop);
             return 0;
             },
         _ => return ERROR_CALL_NOT_IMPLEMENTED,

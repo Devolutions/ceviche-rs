@@ -4,10 +4,11 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 extern crate log4rs;
-
 #[macro_use]
 extern crate ceviche;
+extern crate ctrlc;
 
+use ceviche::ServiceEvent;
 use ceviche::controller::*;
 use clap::App;
 use log::LevelFilter;
@@ -15,7 +16,6 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Root};
-use winapi::um::winsvc::{SERVICE_CONTROL_SHUTDOWN, SERVICE_CONTROL_STOP};
 
 static SERVICE_NAME: &'static str = "foobar";
 static DISPLAY_NAME: &'static str = "FooBar Service";
@@ -45,20 +45,16 @@ fn init_logging(standalone_mode: bool) -> Option<()> {
     Some(())
 }
 
-
-fn my_service_main(rx: mpsc::Receiver<DWORD>, args: Vec<String>, standalone_mode: bool) -> u32 {
+fn my_service_main(rx: mpsc::Receiver<ServiceEvent>, args: Vec<String>, standalone_mode: bool) -> u32 {
     init_logging(standalone_mode);
     info!("foobar service started");
     info!("args: {:?}", args);
 
     loop {
-        match rx.recv() {
-            Ok(control_code) => {
-                if control_code == SERVICE_CONTROL_STOP || control_code == SERVICE_CONTROL_SHUTDOWN {
-                    break;
-                }
+        if let Ok(control_code) = rx.recv() {
+            match control_code {
+                ServiceEvent::Stop => break,
             }
-            _ => (),
         }
     }
 
@@ -90,7 +86,12 @@ fn main() {
             let _result = controller.stop();
         }
         "standalone" => {
-            let (_tx, rx) = mpsc::channel();
+            let (tx, rx) = mpsc::channel();
+
+            ctrlc::set_handler(move || {
+                let _ = tx.send(ServiceEvent::Stop);
+            }).expect("Failed to register Ctrl-C handler");
+
             my_service_main(rx, vec![], true);
         }
         _ => {
