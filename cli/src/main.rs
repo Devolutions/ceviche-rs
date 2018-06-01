@@ -76,16 +76,24 @@ fn main() {
 
     match cmd.as_str() {
         "create" => {
-            let _result = controller.create();
+            if let Err(e) = controller.create() {
+                println!("{}", e);
+            }
         }
         "delete" => {
-            let _result = controller.delete();
+            if let Err(e) = controller.delete() {
+                println!("{}", e);
+            }
         }
         "start" => {
-            let _result = controller.start();
+            if let Err(e) = controller.start() {
+                println!("{}", e);
+            }
         }
         "stop" => {
-            let _result = controller.stop();
+            if let Err(e) = controller.stop() {
+                println!("{}", e);
+            }
         }
         "standalone" => {
             let (tx, rx) = mpsc::channel();

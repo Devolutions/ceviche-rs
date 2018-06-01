@@ -36,6 +36,52 @@ extern "system" {
 
 type WindowsServiceMainWrapperFn = extern "system" fn (DWORD, *mut LPWSTR);
 
+struct Service {
+    pub handle: SC_HANDLE
+}
+
+impl Drop for Service {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe{CloseServiceHandle(self.handle)};
+        }
+    }
+}
+
+struct ServiceControlManager {
+    pub handle: SC_HANDLE
+}
+
+impl ServiceControlManager {
+    fn open(desired_access: DWORD) -> Result<ServiceControlManager, Error> {
+        let handle = unsafe { OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), desired_access) };
+
+        if handle.is_null() {
+            Err(Error::new(&format!("OpenSCManager: {}", get_last_error_text())))
+        } else {
+            Ok(ServiceControlManager{handle})
+        }
+    }
+
+    fn open_service(&self,  service_name: &str, desired_access: DWORD) -> Result<Service, Error> {
+        let handle = unsafe {OpenServiceW(self.handle, get_utf16(service_name).as_ptr(), desired_access)};
+        
+        if handle.is_null() {
+            Err(Error::new(&format!("OpenServiceW: {}", get_last_error_text())))
+        } else {
+            Ok(Service{handle})
+        }
+    }
+}
+
+impl Drop for ServiceControlManager {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe{CloseServiceHandle(self.handle)};
+        }
+    }
+}
+
 pub struct WindowsController {
     pub service_name: String,
     pub display_name: String,
@@ -57,18 +103,13 @@ pub struct WindowsController {
 impl ControllerInterface for WindowsController {
     fn create(&mut self) -> Result<(), Error> {
         unsafe {
-            let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
-
-            if sc_manager.is_null() {
-                print!("OpenSCManager: {}", get_last_error_text());
-                return Err(Error::new("OpenSCManager"));
-            }
+            let service_manager = ServiceControlManager::open(SC_MANAGER_ALL_ACCESS)?;
 
             let filename = get_filename();
             let tag_id = 0;
 
-            let h_service = CreateServiceW(
-                sc_manager,
+            let service = CreateServiceW(
+                service_manager.handle,
                 get_utf16(self.service_name.as_str()).as_ptr(),
                 get_utf16(self.display_name.as_str()).as_ptr(),
                 self.desired_access,
@@ -83,9 +124,8 @@ impl ControllerInterface for WindowsController {
                 ptr::null_mut(),
             );
 
-            if h_service.is_null() {
-                print!("CreateService: {}", get_last_error_text());
-                return Err(Error::new("CreateService"));
+            if service.is_null() {
+                return Err(Error::new(&format!("CreateService: {}", get_last_error_text())));
             }
 
             self.tag_id = tag_id;
@@ -95,8 +135,8 @@ impl ControllerInterface for WindowsController {
             };
 
             let p_sd = &mut sd as *mut _ as *mut winapi::ctypes::c_void;
-            ChangeServiceConfig2W(h_service, SERVICE_CONFIG_DESCRIPTION, p_sd);
-            CloseServiceHandle(sc_manager);
+            ChangeServiceConfig2W(service, SERVICE_CONFIG_DESCRIPTION, p_sd);
+            CloseServiceHandle(service);
 
             Ok(())
         }
@@ -104,22 +144,11 @@ impl ControllerInterface for WindowsController {
 
     fn delete(&mut self) -> Result<(), Error> {
         unsafe {
-            let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
+            let service_manager = ServiceControlManager::open(SC_MANAGER_ALL_ACCESS)?;
+            let service = service_manager.open_service(&self.service_name, SERVICE_ALL_ACCESS)?;
 
-            if sc_manager.is_null() {
-                print!("OpenSCManager: {}", get_last_error_text());
-                return Err(Error::new("OpenSCManager"));
-            }
-
-            let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
-
-            if h_service.is_null() {
-                print!("OpenService: {}", get_last_error_text());
-                return Err(Error::new("OpenService"));
-            }
-
-            if ControlService(sc_manager, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
-                while QueryServiceStatus(h_service, &mut self.service_status) != 0 {
+            if ControlService(service_manager.handle, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
+                while QueryServiceStatus(service.handle, &mut self.service_status) != 0 {
                     if self.service_status.dwCurrentState != SERVICE_STOP_PENDING {
                         break;
                     }
@@ -127,13 +156,9 @@ impl ControllerInterface for WindowsController {
                 }
             }
 
-            if DeleteService(h_service) != 0 {
-                print!("DeleteService: {}", get_last_error_text());
-                return Err(Error::new("DeleteService"));
+            if DeleteService(service.handle) != 0 {
+                return Err(Error::new(&format!("DeleteService: {}", get_last_error_text())));
             }
-
-            CloseServiceHandle(h_service);
-            CloseServiceHandle(sc_manager);
 
             Ok(())
         }
@@ -141,22 +166,11 @@ impl ControllerInterface for WindowsController {
 
     fn start(&mut self) -> Result<(), Error> {
         unsafe {
-            let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
+            let service_manager = ServiceControlManager::open(SC_MANAGER_ALL_ACCESS)?;
+            let service = service_manager.open_service(&self.service_name, SERVICE_ALL_ACCESS)?;
 
-            if sc_manager.is_null() {
-                print!("OpenSCManager: {}", get_last_error_text());
-                return Err(Error::new("OpenSCManager"));
-            }
-
-            let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
-
-            if h_service.is_null() {
-                print!("OpenService: {}", get_last_error_text());
-                return Err(Error::new("OpenService"));
-            }
-
-            if StartServiceW(h_service, 0, ptr::null_mut()) != 0 {
-                while QueryServiceStatus(h_service, &mut self.service_status) != 0 {
+            if StartServiceW(service.handle, 0, ptr::null_mut()) != 0 {
+                while QueryServiceStatus(service.handle, &mut self.service_status) != 0 {
                     if self.service_status.dwCurrentState != SERVICE_START_PENDING {
                         break;
                     }
@@ -165,12 +179,8 @@ impl ControllerInterface for WindowsController {
             }
 
             if self.service_status.dwCurrentState != SERVICE_RUNNING {
-                println!("failed to start service");
                 return Err(Error::new("Failed to start service"));
             }
-
-            CloseServiceHandle(h_service);
-            CloseServiceHandle(sc_manager);
 
             Ok(())
         }
@@ -178,39 +188,23 @@ impl ControllerInterface for WindowsController {
 
     fn stop(&mut self) -> Result<(), Error> {
         unsafe {
-            let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
+            let service_manager = ServiceControlManager::open(SC_MANAGER_ALL_ACCESS)?;
+            let service = service_manager.open_service(&self.service_name, SERVICE_ALL_ACCESS)?;
 
-            if sc_manager.is_null() {
-                print!("OpenSCManager: {}", get_last_error_text());
-                return Err(Error::new("OpenSCManager"));
-            }
-
-            let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
-
-            if h_service.is_null() {
-                print!("OpenService: {}", get_last_error_text());
-                return Err(Error::new("OpenService"));
-            }
-
-            if ControlService(sc_manager, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
-                while QueryServiceStatus(h_service, &mut self.service_status) != 0 {
+            if ControlService(service_manager.handle, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
+                while QueryServiceStatus(service.handle, &mut self.service_status) != 0 {
                     if self.service_status.dwCurrentState != SERVICE_STOP_PENDING {
                         break;
                     }
                     thread::sleep(time::Duration::from_millis(250));
                 }
             } else {
-                println!("failed to stop service");
-                return Err(Error::new("ControlService"));
+                return Err(Error::new("ControlService: failed to stop service"));
             }
 
             if self.service_status.dwCurrentState != SERVICE_STOPPED {
-                println!("failed to stop service");
                 return Err(Error::new("Failed to stop service"));
             }
-
-            CloseServiceHandle(h_service);
-            CloseServiceHandle(sc_manager);
 
             Ok(())
         }
@@ -267,24 +261,6 @@ impl WindowsController {
                 _ => Ok(()),
             }
         }
-    }
-}
-
-impl Drop for WindowsController {
-    fn drop(&mut self) {}
-}
-
-fn open_sc_manager(desired_access: DWORD) -> SC_HANDLE {
-    unsafe { OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), desired_access) }
-}
-
-fn open_service(sc_manager: SC_HANDLE, service_name: &str, desired_access: DWORD) -> SC_HANDLE {
-    unsafe {
-        OpenServiceW(
-            sc_manager,
-            get_utf16(service_name).as_ptr(),
-            desired_access,
-        )
     }
 }
 
