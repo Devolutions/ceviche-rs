@@ -1,4 +1,12 @@
 
+use std::ptr;
+use std::ffi::OsStr;
+use std::iter::once;
+use std::{thread, time};
+use std::io::{Error, ErrorKind};
+use std::os::windows::ffi::OsStrExt;
+use std::sync::mpsc;
+
 use widestring::WideCString;
 use winapi;
 use winapi::um::winsvc::*;
@@ -9,23 +17,13 @@ use winapi::um::errhandlingapi::*;
 use winapi::shared::minwindef::*;
 use winapi::shared::winerror::*;
 
-use std::ptr;
-use std::ffi::OsStr;
-use std::iter::once;
-use std::{thread, time};
-use std::io::{Error, ErrorKind};
-use std::os::windows::ffi::OsStrExt;
-use std::sync::mpsc;
-
 use ServiceEvent;
+use controller::{ControllerInterface, ServiceMainFn};
 
 STRUCT!{#[allow(non_snake_case)]
 	struct SERVICE_DESCRIPTION_W {
     lpDescription: LPWSTR,
 }}
-
-#[allow(non_camel_case_types)]
-pub type PSERVICE_DESCRIPTION_W = *mut SERVICE_DESCRIPTION_W;
 
 extern "system" {
     pub fn ChangeServiceConfig2W(hService: SC_HANDLE, dwInfoLevel: DWORD, lpInfo: LPVOID) -> BOOL;
@@ -36,9 +34,9 @@ extern "system" {
     ) -> BOOL;
 }
 
-pub type ServiceMainFn = fn(mpsc::Receiver<ServiceEvent>, Vec<String>, bool) -> u32;
+type WindowsServiceMainWrapperFn = extern "system" fn (DWORD, *mut LPWSTR);
 
-pub struct Controller {
+pub struct WindowsController {
     pub service_name: String,
     pub display_name: String,
     pub description: String,
@@ -56,40 +54,8 @@ pub struct Controller {
     pub controls_accepted: DWORD,
 }
 
-impl Controller {
-    pub fn new(
-        service_name: &str,
-        display_name: &str,
-        description: &str,
-    ) -> Controller {
-        Controller {
-            service_name: service_name.to_string(),
-            display_name: display_name.to_string(),
-            description: description.to_string(),
-            desired_access: SERVICE_ALL_ACCESS,
-            service_type: SERVICE_WIN32_OWN_PROCESS,
-            start_type: SERVICE_AUTO_START,
-            error_control: SERVICE_ERROR_NORMAL,
-            tag_id: 0,
-            load_order_group: "".to_string(),
-            dependencies: "".to_string(),
-            account_name: "".to_string(),
-            password: "".to_string(),
-            service_status: SERVICE_STATUS {
-                dwServiceType: SERVICE_WIN32_OWN_PROCESS,
-                dwCurrentState: SERVICE_STOPPED,
-                dwControlsAccepted: 0,
-                dwWin32ExitCode: 0,
-                dwServiceSpecificExitCode: 0,
-                dwCheckPoint: 0,
-                dwWaitHint: 0,
-            },
-            status_handle: ptr::null_mut(),
-            controls_accepted: SERVICE_ACCEPT_STOP,
-        }
-    }
-
-    pub fn create(&mut self) -> Result<(), Error> {
+impl ControllerInterface for WindowsController {
+    fn create(&mut self) -> Result<(), Error> {
         unsafe {
             let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
 
@@ -136,7 +102,7 @@ impl Controller {
         }
     }
 
-    pub fn delete(&mut self) -> Result<(), Error> {
+    fn delete(&mut self) -> Result<(), Error> {
         unsafe {
             let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
 
@@ -173,7 +139,7 @@ impl Controller {
         }
     }
 
-    pub fn start(&mut self) -> Result<(), Error> {
+    fn start(&mut self) -> Result<(), Error> {
         unsafe {
             let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
 
@@ -210,7 +176,7 @@ impl Controller {
         }
     }
 
-    pub fn stop(&mut self) -> Result<(), Error> {
+    fn stop(&mut self) -> Result<(), Error> {
         unsafe {
             let sc_manager = open_sc_manager(SC_MANAGER_ALL_ACCESS);
 
@@ -249,8 +215,42 @@ impl Controller {
             Ok(())
         }
     }
+}
 
-    pub fn register(&mut self, service_main_wrapper: extern "system" fn(DWORD, *mut LPWSTR)) -> Result<(), Error> {
+impl WindowsController {
+    pub fn new(
+        service_name: &str,
+        display_name: &str,
+        description: &str,
+    ) -> WindowsController {
+        WindowsController {
+            service_name: service_name.to_string(),
+            display_name: display_name.to_string(),
+            description: description.to_string(),
+            desired_access: SERVICE_ALL_ACCESS,
+            service_type: SERVICE_WIN32_OWN_PROCESS,
+            start_type: SERVICE_AUTO_START,
+            error_control: SERVICE_ERROR_NORMAL,
+            tag_id: 0,
+            load_order_group: "".to_string(),
+            dependencies: "".to_string(),
+            account_name: "".to_string(),
+            password: "".to_string(),
+            service_status: SERVICE_STATUS {
+                dwServiceType: SERVICE_WIN32_OWN_PROCESS,
+                dwCurrentState: SERVICE_STOPPED,
+                dwControlsAccepted: 0,
+                dwWin32ExitCode: 0,
+                dwServiceSpecificExitCode: 0,
+                dwCheckPoint: 0,
+                dwWaitHint: 0,
+            },
+            status_handle: ptr::null_mut(),
+            controls_accepted: SERVICE_ACCEPT_STOP,
+        }
+    }
+
+    pub fn register(&mut self, service_main_wrapper: WindowsServiceMainWrapperFn) -> Result<(), Error> {
         unsafe {
             let service_name = get_utf16(self.service_name.as_str());
 
@@ -270,7 +270,7 @@ impl Controller {
     }
 }
 
-impl Drop for Controller {
+impl Drop for WindowsController {
     fn drop(&mut self) {}
 }
 
@@ -384,7 +384,6 @@ macro_rules! Service { ( $name:expr, $function:ident ) => {
     extern crate winapi;
     use winapi::shared::minwindef::DWORD;
     use winapi::um::winnt::LPWSTR;
-    use std::sync::mpsc;
 
     extern "system" fn service_main_wrapper(argc: DWORD, argv: *mut LPWSTR) {
         dispatch($function, $name, argc, argv);

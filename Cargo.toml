@@ -9,6 +9,7 @@ keywords = ["daemon", "service"]
 description = "Rust daemon/service wrapper"
 
 [dependencies]
+cfg-if = "0.1"
 clap = { version = "2.31", features = ["yaml"] }
 
 [target.'cfg(windows)'.dependencies]

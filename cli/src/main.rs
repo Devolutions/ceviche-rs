@@ -8,6 +8,8 @@ extern crate log4rs;
 extern crate ceviche;
 extern crate ctrlc;
 
+use std::sync::mpsc;
+
 use ceviche::ServiceEvent;
 use ceviche::controller::*;
 use clap::App;
