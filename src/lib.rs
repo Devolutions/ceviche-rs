@@ -11,6 +11,17 @@ cfg_if!{
 
 pub mod controller;
 
+#[derive(Debug)]
+pub struct Error {
+    pub message: String,
+}
+
+impl Error {
+    pub fn new(message: &str) -> Error {
+        Error{message: String::from(message)}
+    }
+}
+
 pub enum ServiceEvent {
         Stop
 }

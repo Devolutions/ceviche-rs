@@ -1,7 +1,7 @@
 
-use std::io::Error;
 use std::sync::mpsc;
 
+use Error;
 use ServiceEvent;
 
 cfg_if!{

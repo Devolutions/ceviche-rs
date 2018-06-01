@@ -1,5 +1,5 @@
 
-use std::io::Error;
+use Error;
 
 use controller::ControllerInterface;
 

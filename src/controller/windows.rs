@@ -3,7 +3,6 @@ use std::ptr;
 use std::ffi::OsStr;
 use std::iter::once;
 use std::{thread, time};
-use std::io::{Error, ErrorKind};
 use std::os::windows::ffi::OsStrExt;
 use std::sync::mpsc;
 
@@ -17,6 +16,7 @@ use winapi::um::errhandlingapi::*;
 use winapi::shared::minwindef::*;
 use winapi::shared::winerror::*;
 
+use Error;
 use ServiceEvent;
 use controller::{ControllerInterface, ServiceMainFn};
 
@@ -61,7 +61,7 @@ impl ControllerInterface for WindowsController {
 
             if sc_manager.is_null() {
                 print!("OpenSCManager: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
+                return Err(Error::new("OpenSCManager"));
             }
 
             let filename = get_filename();
@@ -85,7 +85,7 @@ impl ControllerInterface for WindowsController {
 
             if h_service.is_null() {
                 print!("CreateService: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "CreateService"));
+                return Err(Error::new("CreateService"));
             }
 
             self.tag_id = tag_id;
@@ -108,14 +108,14 @@ impl ControllerInterface for WindowsController {
 
             if sc_manager.is_null() {
                 print!("OpenSCManager: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
+                return Err(Error::new("OpenSCManager"));
             }
 
             let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
 
             if h_service.is_null() {
                 print!("OpenService: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "OpenService"));
+                return Err(Error::new("OpenService"));
             }
 
             if ControlService(sc_manager, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
@@ -129,7 +129,7 @@ impl ControllerInterface for WindowsController {
 
             if DeleteService(h_service) != 0 {
                 print!("DeleteService: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "DeleteService"));
+                return Err(Error::new("DeleteService"));
             }
 
             CloseServiceHandle(h_service);
@@ -145,14 +145,14 @@ impl ControllerInterface for WindowsController {
 
             if sc_manager.is_null() {
                 print!("OpenSCManager: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
+                return Err(Error::new("OpenSCManager"));
             }
 
             let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
 
             if h_service.is_null() {
                 print!("OpenService: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "OpenService"));
+                return Err(Error::new("OpenService"));
             }
 
             if StartServiceW(h_service, 0, ptr::null_mut()) != 0 {
@@ -166,7 +166,7 @@ impl ControllerInterface for WindowsController {
 
             if self.service_status.dwCurrentState != SERVICE_RUNNING {
                 println!("failed to start service");
-                return Err(Error::new(ErrorKind::Other, "Failed to start service"));
+                return Err(Error::new("Failed to start service"));
             }
 
             CloseServiceHandle(h_service);
@@ -182,14 +182,14 @@ impl ControllerInterface for WindowsController {
 
             if sc_manager.is_null() {
                 print!("OpenSCManager: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "OpenSCManager"));
+                return Err(Error::new("OpenSCManager"));
             }
 
             let h_service = open_service(sc_manager, &self.service_name, SERVICE_ALL_ACCESS);
 
             if h_service.is_null() {
                 print!("OpenService: {}", get_last_error_text());
-                return Err(Error::new(ErrorKind::Other, "OpenService"));
+                return Err(Error::new("OpenService"));
             }
 
             if ControlService(sc_manager, SERVICE_CONTROL_STOP, &mut self.service_status) != 0 {
@@ -201,12 +201,12 @@ impl ControllerInterface for WindowsController {
                 }
             } else {
                 println!("failed to stop service");
-                return Err(Error::new(ErrorKind::Other, "ControlService"));
+                return Err(Error::new("ControlService"));
             }
 
             if self.service_status.dwCurrentState != SERVICE_STOPPED {
                 println!("failed to stop service");
-                return Err(Error::new(ErrorKind::Other, "Failed to stop service"));
+                return Err(Error::new("Failed to stop service"));
             }
 
             CloseServiceHandle(h_service);
@@ -263,7 +263,7 @@ impl WindowsController {
             ];
 
             match StartServiceCtrlDispatcherW(*service_table.as_ptr()) {
-                0 => Err(Error::new(ErrorKind::Other, "StartServiceCtrlDispatcher")),
+                0 => Err(Error::new("StartServiceCtrlDispatcher")),
                 _ => Ok(()),
             }
         }
