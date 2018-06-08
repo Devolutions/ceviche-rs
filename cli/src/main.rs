@@ -54,8 +54,10 @@ fn my_service_main(rx: mpsc::Receiver<ServiceEvent>, args: Vec<String>, standalo
 
     loop {
         if let Ok(control_code) = rx.recv() {
+            info!("Received control code: {}", control_code);
             match control_code {
                 ServiceEvent::Stop => break,
+                _ => (),
             }
         }
     }
