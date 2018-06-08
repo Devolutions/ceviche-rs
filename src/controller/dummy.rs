@@ -1,4 +1,5 @@
-
+/// The dummy controller is a mock controller, the only operation that as an
+/// effect is calling it in standalone mode.
 use Error;
 
 use controller::ControllerInterface;
