@@ -64,11 +64,8 @@
 
 #[macro_use]
 extern crate cfg_if;
-#[macro_use]
-extern crate enum_display_derive;
 
 use std::fmt;
-use std::fmt::Display;
 
 cfg_if!{
     if #[cfg(windows)] {
@@ -108,7 +105,6 @@ impl Error {
 }
 
 /// Events that are sent to the service.
-#[derive(Display)]
 pub enum ServiceEvent {
     Continue,
     Pause,
@@ -117,4 +113,18 @@ pub enum ServiceEvent {
     SessionDisconnect(u32),
     SessionLock(u32),
     SessionUnlock(u32),
+}
+
+impl fmt::Display for ServiceEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            ServiceEvent::Continue => write!(f, "Continue"),
+            ServiceEvent::Pause => write!(f, "Pause"),
+            ServiceEvent::Stop => write!(f, "Stop"),
+            ServiceEvent::SessionConnect(id) => write!(f, "SessionConnect({})", id),
+            ServiceEvent::SessionDisconnect(id) => write!(f, "SessionDisconnect({})", id),
+            ServiceEvent::SessionLock(id) => write!(f, "SessionLock({})", id),
+            ServiceEvent::SessionUnlock(id) => write!(f, "SessionUnlock({})", id),
+        }
+    }
 }
