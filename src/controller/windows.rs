@@ -287,13 +287,13 @@ fn set_service_status(
     }
 }
 
-unsafe extern "system" fn service_handler(
+unsafe extern "system" fn service_handler<T>(
     control: DWORD,
     event_type: DWORD,
     event_data: LPVOID,
     context: LPVOID,
 ) -> DWORD {
-    let tx = context as *mut mpsc::Sender<ServiceEvent>;
+    let tx = context as *mut mpsc::Sender<ServiceEvent<T>>;
 
 	match control {
 		SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
@@ -401,17 +401,18 @@ macro_rules! Service { ( $name:expr, $function:ident ) => {
 }}
 
 #[doc(hidden)]
-pub fn dispatch(service_main : ServiceMainFn, name: &str, argc: DWORD, argv: *mut LPWSTR) {
+pub fn dispatch<T>(service_main : ServiceMainFn<T>, name: &str, argc: DWORD, argv: *mut LPWSTR) {
     let args = get_args(argc, argv);
     let service_name = get_utf16(name);
     let (mut tx, rx) = mpsc::channel();
+    let _tx = tx.clone();
     let ctrl_handle = unsafe {RegisterServiceCtrlHandlerExW(
         service_name.as_ptr(),
-        Some(service_handler),
+        Some(service_handler::<T>),
         &mut tx as *mut _ as LPVOID,
     )};
     set_service_status(ctrl_handle, SERVICE_START_PENDING, 0);
     set_service_status(ctrl_handle, SERVICE_RUNNING, 0);
-    service_main(rx, args, false);
+    service_main(rx, _tx, args, false);
     set_service_status(ctrl_handle, SERVICE_STOPPED, 0);
 }

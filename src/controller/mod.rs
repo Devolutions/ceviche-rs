@@ -17,11 +17,15 @@ cfg_if!{
 }
 
 /// Signature of the service main function.
-/// `rx` receives the events that are sent to the service. `args` is the list or arguments that were passed to
-/// the service. When `standalone_mode` is true, the service main function is being called directly (outside of
-/// the system service support).
-pub type ServiceMainFn =
-    fn(rx: mpsc::Receiver<ServiceEvent>, args: Vec<String>, standalone_mode: bool) -> u32;
+/// `rx` receives the events that are sent to the service. `tx` can be used to send custom events on the channel.
+/// `args` is the list or arguments that were passed to the service. When `standalone_mode` is true, the service
+/// main function is being called directly (outside of the system service support).
+pub type ServiceMainFn<T> = fn(
+    rx: mpsc::Receiver<ServiceEvent<T>>,
+    tx: mpsc::Sender<ServiceEvent<T>>,
+    args: Vec<String>,
+    standalone_mode: bool,
+) -> u32;
 
 /// Controllers implement this interface. They also need to implement the `register()` method; because the signature
 /// of service_main_wrapper depends on the system the method is not part of the interface.

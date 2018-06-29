@@ -7,7 +7,14 @@
 //! the `Service!` macro. The events are sent to the service over the `rx` channel.
 //!
 //! ```rust
-//! fn my_service_main(rx: mpsc::Receiver<ServiceEvent>, args: Vec<String>, standalone_mode: bool) -> u32 {
+//! //! enum CustomServiceEvent {}
+//!
+//! #![macro_use]
+//! fn my_service_main(
+//!     rx: mpsc::Receiver<ServiceEvent<CustomServiceEvent>>,
+//!     _tx: mpsc::Sender<ServiceEvent<CustomServiceEvent>>,
+//!     args: Vec<String>,
+//!     standalone_mode: bool) -> u32 {
 //!    loop {
 //!        if let Ok(control_code) = rx.recv() {
 //!            match control_code {
@@ -105,7 +112,7 @@ impl Error {
 }
 
 /// Events that are sent to the service.
-pub enum ServiceEvent {
+pub enum ServiceEvent<T> {
     Continue,
     Pause,
     Stop,
@@ -113,9 +120,10 @@ pub enum ServiceEvent {
     SessionDisconnect(u32),
     SessionLock(u32),
     SessionUnlock(u32),
+    Custom(T),
 }
 
-impl fmt::Display for ServiceEvent {
+impl<T> fmt::Display for ServiceEvent<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             ServiceEvent::Continue => write!(f, "Continue"),
@@ -125,6 +133,7 @@ impl fmt::Display for ServiceEvent {
             ServiceEvent::SessionDisconnect(id) => write!(f, "SessionDisconnect({})", id),
             ServiceEvent::SessionLock(id) => write!(f, "SessionLock({})", id),
             ServiceEvent::SessionUnlock(id) => write!(f, "SessionUnlock({})", id),
+            ServiceEvent::Custom(_) => write!(f, "Custom"),
         }
     }
 }
