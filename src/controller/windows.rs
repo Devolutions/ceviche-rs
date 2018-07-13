@@ -21,6 +21,8 @@ use Error;
 use ServiceEvent;
 use controller::{ControllerInterface, ServiceMainFn};
 
+static mut SERVICE_CONTROL_HANDLE: SERVICE_STATUS_HANDLE = ptr::null_mut();
+
 STRUCT!{#[allow(non_snake_case)]
 	struct SERVICE_DESCRIPTION_W {
     lpDescription: LPWSTR,
@@ -297,6 +299,7 @@ unsafe extern "system" fn service_handler<T>(
 
 	match control {
 		SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
+            set_service_status(SERVICE_CONTROL_HANDLE, SERVICE_STOP_PENDING, 10);
             let _ = (*tx).send(ServiceEvent::Stop);
             return 0;
             },
@@ -411,6 +414,7 @@ pub fn dispatch<T>(service_main : ServiceMainFn<T>, name: &str, argc: DWORD, arg
         Some(service_handler::<T>),
         &mut tx as *mut _ as LPVOID,
     )};
+    unsafe{ SERVICE_CONTROL_HANDLE = ctrl_handle };
     set_service_status(ctrl_handle, SERVICE_START_PENDING, 0);
     set_service_status(ctrl_handle, SERVICE_RUNNING, 0);
     service_main(rx, _tx, args, false);
