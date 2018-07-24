@@ -322,6 +322,12 @@ unsafe extern "system" fn service_handler<T>(
             } else if event == WTS_CONSOLE_DISCONNECT || event == WTS_REMOTE_DISCONNECT {
                 let _ = (*tx).send(ServiceEvent::SessionDisconnect(session_id));
                 return 0;
+            } else if event == WTS_SESSION_LOGON {
+                let _ = (*tx).send(ServiceEvent::SessionLogon(session_id));
+                return 0;
+            } else if event == WTS_SESSION_LOGOFF {
+                let _ = (*tx).send(ServiceEvent::SessionLogoff(session_id));
+                return 0;
             } else if event == WTS_SESSION_LOCK {
                 let _ = (*tx).send(ServiceEvent::SessionLock(session_id));
                 return 0;
