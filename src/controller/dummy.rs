@@ -29,11 +29,7 @@ impl ControllerInterface for DummyController {
 }
 
 impl DummyController {
-    pub fn new(
-        _service_name: &str,
-        _display_name: &str,
-        _description: &str,
-    ) -> DummyController {
+    pub fn new(_service_name: &str, _display_name: &str, _description: &str) -> DummyController {
         DummyController {}
     }
 
@@ -43,8 +39,10 @@ impl DummyController {
 }
 
 #[macro_export]
-macro_rules! Service { ( $name:expr, $function:ident ) => {
-    fn service_main_wrapper() {
-        ()
-    }
-}}
+macro_rules! Service {
+    ($name:expr, $function:ident) => {
+        fn service_main_wrapper() {
+            ()
+        }
+    };
+}
