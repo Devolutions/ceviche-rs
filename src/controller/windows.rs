@@ -389,17 +389,6 @@ pub fn get_filename() -> String {
     }
 }
 
-pub fn get_username() -> String {
-    unsafe {
-        let mut size = 0;
-        GetUserNameW(ptr::null_mut(), &mut size);
-        let mut username = Vec::with_capacity(size as usize);
-        GetUserNameW(username.as_mut_ptr(), &mut size);
-        username.set_len(size as usize);
-        String::from_utf16(&username).unwrap_or_else(|_| String::from(""))
-    }
-}
-
 pub fn get_last_error_text() -> String {
     unsafe {
         let mut message = [0u16; 512];
