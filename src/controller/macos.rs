@@ -1,5 +1,8 @@
 use std::env;
-use std::marker::Send;
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::Path;
+use std::process::Command;
 use std::sync::mpsc;
 
 use ctrlc;
@@ -9,6 +12,82 @@ use Error;
 use ServiceEvent;
 
 type MacosServiceMainWrapperFn = extern "system" fn(args: Vec<String>);
+
+fn gen_service_plist(name: &str) -> String {
+    format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{0}</string>
+    <key>ProgramArguments</key>
+    <array>
+	    <string>/usr/local/bin/{0}</string>
+    </array>
+</dict>
+</plist>
+"#, name)
+}
+
+fn launchctl_load_daemon(plist_path: &Path) -> Result<(), Error> {
+    let output = Command::new("launchctl")
+        .arg("load")
+        .arg(&plist_path.to_str().unwrap())
+        .output()
+        .map_err(|e| {
+            Error::new(&format!(
+                "Failed to load plist {}: {}",
+                plist_path.display(),
+                e
+            ))
+        })?;
+    if output.stdout.len() > 0 {
+        info!("{}", String::from_utf8_lossy(&output.stdout));
+    }
+    Ok(())
+}
+
+fn launchctl_unload_daemon(plist_path: &Path) -> Result<(), Error> {
+    let output = Command::new("launchctl")
+        .arg("unload")
+        .arg(&plist_path.to_str().unwrap())
+        .output()
+        .map_err(|e| {
+            Error::new(&format!(
+                "Failed to unload plist {}: {}",
+                plist_path.display(),
+                e
+            ))
+        })?;
+    if output.stdout.len() > 0 {
+        info!("{}", String::from_utf8_lossy(&output.stdout));
+    }
+    Ok(())
+}
+
+fn launchctl_start_daemon(name: &str) -> Result<(), Error> {
+    let output = Command::new("launchctl")
+        .arg("start")
+        .arg(name)
+        .output()
+        .map_err(|e| Error::new(&format!("Failed to start {}: {}", name, e)))?;
+    if output.stdout.len() > 0 {
+        info!("{}", String::from_utf8_lossy(&output.stdout));
+    }
+    Ok(())
+}
+
+fn launchctl_stop_daemon(name: &str) -> Result<(), Error> {
+    let output = Command::new("launchctl")
+        .arg("stop")
+        .arg(name)
+        .output()
+        .map_err(|e| Error::new(&format!("Failed to stop {}: {}", name, e)))?;
+    if output.stdout.len() > 0 {
+        info!("{}", String::from_utf8_lossy(&output.stdout));
+    }
+    Ok(())
+}
 
 pub struct MacosController {
     /// Manages the service on the system.
@@ -34,24 +113,39 @@ impl MacosController {
         service_main_wrapper(env::args().collect());
         Ok(())
     }
+
+    fn write_plist(&self, path: &Path) -> Result<(), Error> {
+        info!("Writing plist file {}", path.display());
+        let plist_content = gen_service_plist(&self.service_name);
+        File::create(path)
+            .and_then(|mut file| file.write_all(plist_content.as_bytes()))
+            .map_err(|e| Error::new(&format!("Failed to write {}: {}", path.display(), e)))
+    }
 }
 
 impl ControllerInterface for MacosController {
     /// Creates the service on the system.
     fn create(&mut self) -> Result<(), Error> {
-        unimplemented!()
+        let plist_path =
+            Path::new("/Library/LaunchDaemons/").join(format!("{}.plist", &self.service_name));
+        self.write_plist(&plist_path)?;
+        launchctl_load_daemon(&plist_path)
     }
     /// Deletes the service.
     fn delete(&mut self) -> Result<(), Error> {
-        unimplemented!()
+        let plist_path =
+            Path::new("/Library/LaunchDaemons/").join(format!("{}.plist", &self.service_name));
+        launchctl_unload_daemon(&plist_path)?;
+        fs::remove_file(&plist_path)
+            .map_err(|e| Error::new(&format!("Failed to delete {}: {}", plist_path.display(), e)))
     }
     /// Starts the service.
     fn start(&mut self) -> Result<(), Error> {
-        unimplemented!()
+        launchctl_start_daemon(&self.service_name)
     }
     /// Stops the service.
     fn stop(&mut self) -> Result<(), Error> {
-        unimplemented!()
+        launchctl_stop_daemon(&self.service_name)
     }
 }
 
