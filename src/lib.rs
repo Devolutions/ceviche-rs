@@ -78,6 +78,8 @@ cfg_if!{
         #[macro_use]
         extern crate winapi;
         extern crate widestring;
+    } else if #[cfg(target_os = "macos")] {
+        extern crate ctrlc;
     }
 }
 

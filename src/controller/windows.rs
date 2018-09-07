@@ -365,7 +365,7 @@ fn get_args(argc: DWORD, argv: *mut LPWSTR) -> Vec<String> {
     let mut args = Vec::new();
     for i in 0..argc {
         unsafe {
-            let s = *argv.offset(i as isize);
+            let s = *argv.add(i as usize);
             let widestr = WideCString::from_ptr_str(s);
             args.push(widestr.to_string_lossy());
         }

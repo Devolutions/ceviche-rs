@@ -10,6 +10,10 @@ cfg_if!{
         mod windows;
         pub use controller::windows::WindowsController as Controller;
         pub use controller::windows::dispatch;
+    } else if #[cfg(target_os = "macos")] {
+        mod macos;
+        pub use controller::macos::MacosController as Controller;
+        pub use controller::macos::dispatch;
     } else {
         mod dummy;
         pub use controller::dummy::DummyController as Controller;
