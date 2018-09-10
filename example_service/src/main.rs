@@ -22,6 +22,11 @@ static SERVICE_NAME: &'static str = "foobar";
 static DISPLAY_NAME: &'static str = "FooBar Service";
 static DESCRIPTION: &'static str = "This is the FooBar service";
 
+#[cfg(windows)]
+const LOG_PATH: &'static str = "C:\\Windows\\Temp\\foobar.log";
+#[cfg(any(unix, target_os = "macos"))]
+const LOG_PATH: &'static str = "/tmp/foobar.log";
+
 enum CustomServiceEvent {}
 
 fn init_logging(standalone_mode: bool) -> Option<()> {
@@ -39,7 +44,7 @@ fn init_logging(standalone_mode: bool) -> Option<()> {
             .encoder(Box::new(PatternEncoder::new(
                 "{d(%Y-%m-%d %H:%M:%S)} {M} [{h({l})}] - {m}{n}",
             )))
-            .build("C:\\Windows\\Temp\\foobar.log")
+            .build(LOG_PATH)
             .ok()?;
 
         let config = Config::builder()
@@ -53,7 +58,6 @@ fn init_logging(standalone_mode: bool) -> Option<()> {
 
         log4rs::init_config(config).ok()?;
     }
-
     Some(())
 }
 
