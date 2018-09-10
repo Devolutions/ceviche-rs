@@ -7,6 +7,10 @@ repository = "https://github.com/wayk/ceviche-rs"
 authors = ["Marc-André Moreau <marcandre.moreau@gmail.com>", "Sébastien Duquette <sduquette@devolutions.net>"]
 keywords = ["daemon", "service"]
 description = "Rust daemon/service wrapper"
+exclude = [
+    ".*",
+    "appveyor.yml"
+]
 
 [dependencies]
 cfg-if = "0.1"
