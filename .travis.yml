@@ -2,7 +2,9 @@ language: rust
 rust:
   - stable
   - beta
-os: osx
+os:
+  - osx
+  - windows
 # Cache settings based on https://levans.fr/rust_travis_cache.html
 cache:
   directories:
