@@ -1,15 +1,15 @@
 use std::sync::mpsc;
 
-use Error;
-use ServiceEvent;
+use crate::Error;
+use crate::ServiceEvent;
 
 // On platforms other than Windows we default to the dummy controller.
 cfg_if!{
     if #[cfg(windows)] {
         #[macro_use]
         mod windows;
-        pub use controller::windows::WindowsController as Controller;
-        pub use controller::windows::dispatch;
+        pub use crate::controller::windows::WindowsController as Controller;
+        pub use crate::controller::windows::dispatch;
     } else if #[cfg(target_os = "macos")] {
         mod macos;
         pub use controller::macos::MacosController as Controller;

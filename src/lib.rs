@@ -70,20 +70,8 @@
 
 #[macro_use]
 extern crate cfg_if;
-#[macro_use]
-extern crate log;
 
 use std::fmt;
-
-cfg_if!{
-    if #[cfg(windows)] {
-        #[macro_use]
-        extern crate winapi;
-        extern crate widestring;
-    } else if #[cfg(target_os = "macos")] {
-        extern crate ctrlc;
-    }
-}
 
 /// Manages the service on the system.
 pub mod controller;
