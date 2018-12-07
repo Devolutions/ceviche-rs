@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::{thread, time};
 
 use widestring::WideCString;
-use winapi;
+use winapi::{self, STRUCT};
 use winapi::shared::minwindef::*;
 use winapi::shared::winerror::*;
 use winapi::um::errhandlingapi::*;
@@ -16,9 +16,9 @@ use winapi::um::winnt::*;
 use winapi::um::winsvc::*;
 use winapi::um::winuser::*;
 
-use controller::{ControllerInterface, ServiceMainFn};
-use Error;
-use ServiceEvent;
+use crate::controller::{ControllerInterface, ServiceMainFn};
+use crate::Error;
+use crate::ServiceEvent;
 
 static mut SERVICE_CONTROL_HANDLE: SERVICE_STATUS_HANDLE = ptr::null_mut();
 
@@ -409,7 +409,6 @@ pub fn get_last_error_text() -> String {
 #[macro_export]
 macro_rules! Service {
     ($name:expr, $function:ident) => {
-        extern crate winapi;
         use winapi::shared::minwindef::DWORD;
         use winapi::um::winnt::LPWSTR;
 

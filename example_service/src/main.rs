@@ -2,15 +2,11 @@
 extern crate clap;
 #[macro_use]
 extern crate log;
-extern crate log4rs;
-#[macro_use]
-extern crate ceviche;
-extern crate ctrlc;
 
 use std::sync::mpsc;
 
 use ceviche::controller::*;
-use ceviche::ServiceEvent;
+use ceviche::{Service, ServiceEvent};
 use clap::App;
 use log::LevelFilter;
 use log4rs::append::console::ConsoleAppender;

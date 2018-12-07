@@ -6,10 +6,11 @@ use std::process::Command;
 use std::sync::mpsc;
 
 use ctrlc;
+use log::info;
 
-use controller::{ControllerInterface, ServiceMainFn};
-use Error;
-use ServiceEvent;
+use crate::controller::{ControllerInterface, ServiceMainFn};
+use crate::Error;
+use crate::ServiceEvent;
 
 type MacosServiceMainWrapperFn = extern "system" fn(args: Vec<String>);
 
