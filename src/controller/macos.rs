@@ -6,6 +6,7 @@ use std::process::Command;
 use std::sync::mpsc;
 
 use ctrlc;
+use log::info;
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
 use crate::Error;

@@ -8,15 +8,15 @@ cfg_if!{
     if #[cfg(windows)] {
         #[macro_use]
         mod windows;
-        pub use crate::controller::windows::WindowsController as Controller;
-        pub use crate::controller::windows::dispatch;
+        pub use self::windows::WindowsController as Controller;
+        pub use self::windows::dispatch;
     } else if #[cfg(target_os = "macos")] {
         mod macos;
-        pub use controller::macos::MacosController as Controller;
-        pub use controller::macos::dispatch;
+        pub use self::macos::MacosController as Controller;
+        pub use self::macos::dispatch;
     } else {
         mod dummy;
-        pub use controller::dummy::DummyController as Controller;
+        pub use self::dummy::DummyController as Controller;
     }
 }
 
