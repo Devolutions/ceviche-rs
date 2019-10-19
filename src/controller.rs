@@ -3,7 +3,6 @@ use std::sync::mpsc;
 use crate::Error;
 use crate::ServiceEvent;
 
-// On platforms other than Windows we default to the dummy controller.
 cfg_if!{
     if #[cfg(windows)] {
         #[macro_use]
@@ -14,6 +13,10 @@ cfg_if!{
         mod macos;
         pub use self::macos::MacosController as Controller;
         pub use self::macos::dispatch;
+    } else if #[cfg(target_os = "linux")] {
+        mod linux;
+        pub use self::linux::LinuxController as Controller;
+        pub use self::linux::dispatch;
     } else {
         mod dummy;
         pub use self::dummy::DummyController as Controller;

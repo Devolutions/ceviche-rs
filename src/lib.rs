@@ -82,6 +82,12 @@ pub struct Error {
     pub message: String,
 }
 
+impl From<&str> for Error {
+    fn from(message: &str) -> Self {
+        Error { message: message.to_string() }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self.message,)
