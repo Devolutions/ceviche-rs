@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -173,7 +174,7 @@ macro_rules! Service {
 }
 
 #[doc(hidden)]
-pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
+pub fn dispatch<T: Display + Send + 'static, A: Send + 'static>(service_main: ServiceMainFn<T, A>, args: Vec<String>) {
     let (tx, rx) = mpsc::channel();
     let _tx = tx.clone();
 
