@@ -10,8 +10,8 @@
 //!  enum CustomServiceEvent {}
 //!
 //! fn my_service_main(
-//!     rx: mpsc::Receiver<ServiceEvent<CustomServiceEvent>>,
-//!     _tx: mpsc::Sender<ServiceEvent<CustomServiceEvent>>,
+//!     rx: mpsc::Receiver<ServiceEvent<u32, CustomServiceEvent>>,
+//!     _tx: mpsc::Sender<ServiceEvent<u32, CustomServiceEvent>>,
 //!     args: Vec<String>,
 //!     standalone_mode: bool) -> u32 {
 //!    loop {
@@ -109,20 +109,20 @@ impl Error {
 }
 
 /// Events that are sent to the service.
-pub enum ServiceEvent<T> {
+pub enum ServiceEvent<T: fmt::Display, A> {
     Continue,
     Pause,
     Stop,
-    SessionConnect(u32),
-    SessionDisconnect(u32),
-    SessionLogon(u32),
-    SessionLogoff(u32),
-    SessionLock(u32),
-    SessionUnlock(u32),
-    Custom(T),
+    SessionConnect(T),
+    SessionDisconnect(T),
+    SessionLogon(T),
+    SessionLogoff(T),
+    SessionLock(T),
+    SessionUnlock(T),
+    Custom(A),
 }
 
-impl<T> fmt::Display for ServiceEvent<T> {
+impl<T: fmt::Display, A> fmt::Display for ServiceEvent<T, A>  {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             ServiceEvent::Continue => write!(f, "Continue"),

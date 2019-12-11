@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::iter::once;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr;
@@ -308,13 +309,13 @@ fn set_service_status(
     }
 }
 
-unsafe extern "system" fn service_handler<T>(
+unsafe extern "system" fn service_handler<T, A>(
     control: DWORD,
     event_type: DWORD,
     event_data: LPVOID,
     context: LPVOID,
-) -> DWORD {
-    let tx = context as *mut mpsc::Sender<ServiceEvent<T>>;
+) -> DWORD where T : Display {
+    let tx = context as *mut mpsc::Sender<ServiceEvent<u32, A>>;
 
     match control {
         SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
@@ -419,7 +420,12 @@ macro_rules! Service {
 }
 
 #[doc(hidden)]
-pub fn dispatch<T>(service_main: ServiceMainFn<T>, name: &str, argc: DWORD, argv: *mut LPWSTR) {
+pub fn dispatch<T: Display, A>(
+    service_main: ServiceMainFn<T, A>, 
+    name: &str, 
+    argc: DWORD, 
+    argv: *mut LPWSTR) 
+{
     let args = get_args(argc, argv);
     let service_name = get_utf16(name);
     let (mut tx, rx) = mpsc::channel();
@@ -427,7 +433,7 @@ pub fn dispatch<T>(service_main: ServiceMainFn<T>, name: &str, argc: DWORD, argv
     let ctrl_handle = unsafe {
         RegisterServiceCtrlHandlerExW(
             service_name.as_ptr(),
-            Some(service_handler::<T>),
+            Some(service_handler::<T, A>),
             &mut tx as *mut _ as LPVOID,
         )
     };
