@@ -1,5 +1,4 @@
 use std::env;
-use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -10,10 +9,12 @@ use ctrlc;
 use log::{debug, info};
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
+use crate::session;
 use crate::Error;
 use crate::ServiceEvent;
 
 type LinuxServiceMainWrapperFn = extern "system" fn(args: Vec<String>);
+pub type Session = session::Session_<String>;
 
 fn systemctl_execute(args: &[&str]) -> Result<(), Error> {
     let mut process = Command::new("systemctl");
@@ -174,7 +175,7 @@ macro_rules! Service {
 }
 
 #[doc(hidden)]
-pub fn dispatch<T: Display + Send + 'static, A: Send + 'static>(service_main: ServiceMainFn<T, A>, args: Vec<String>) {
+pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
     let (tx, rx) = mpsc::channel();
     let _tx = tx.clone();
 

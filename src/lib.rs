@@ -75,6 +75,9 @@ use std::fmt;
 
 /// Manages the service on the system.
 pub mod controller;
+pub mod session;
+
+use controller::Session;
 
 /// Service errors
 #[derive(Debug)]
@@ -109,20 +112,20 @@ impl Error {
 }
 
 /// Events that are sent to the service.
-pub enum ServiceEvent<T: fmt::Display, A> {
+pub enum ServiceEvent<T> {
     Continue,
     Pause,
     Stop,
-    SessionConnect(T),
-    SessionDisconnect(T),
-    SessionLogon(T),
-    SessionLogoff(T),
-    SessionLock(T),
-    SessionUnlock(T),
-    Custom(A),
+    SessionConnect(Session),
+    SessionDisconnect(Session),
+    SessionLogon(Session),
+    SessionLogoff(Session),
+    SessionLock(Session),
+    SessionUnlock(Session),
+    Custom(T),
 }
 
-impl<T: fmt::Display, A> fmt::Display for ServiceEvent<T, A>  {
+impl<T> fmt::Display for ServiceEvent<T>  {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             ServiceEvent::Continue => write!(f, "Continue"),

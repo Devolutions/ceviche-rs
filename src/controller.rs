@@ -16,6 +16,7 @@ cfg_if!{
     } else if #[cfg(target_os = "linux")] {
         mod linux;
         pub use self::linux::LinuxController as Controller;
+        pub use self::linux::Session as Session;
         pub use self::linux::dispatch;
     } else {
         mod dummy;
@@ -27,9 +28,9 @@ cfg_if!{
 /// `rx` receives the events that are sent to the service. `tx` can be used to send custom events on the channel.
 /// `args` is the list or arguments that were passed to the service. When `standalone_mode` is true, the service
 /// main function is being called directly (outside of the system service support).
-pub type ServiceMainFn<T, A> = fn(
-    rx: mpsc::Receiver<ServiceEvent<T, A>>,
-    tx: mpsc::Sender<ServiceEvent<T, A>>,
+pub type ServiceMainFn<T> = fn(
+    rx: mpsc::Receiver<ServiceEvent<T>>,
+    tx: mpsc::Sender<ServiceEvent<T>>,
     args: Vec<String>,
     standalone_mode: bool,
 ) -> u32;
