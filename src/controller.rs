@@ -8,6 +8,7 @@ cfg_if!{
         #[macro_use]
         mod windows;
         pub use self::windows::WindowsController as Controller;
+        pub use self::windows::Session as Session;
         pub use self::windows::dispatch;
     } else if #[cfg(target_os = "macos")] {
         mod macos;

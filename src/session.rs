@@ -18,7 +18,7 @@ impl<T> PartialEq for Session_<T> where T: Display + PartialEq {
 }
 
 impl<T> Session_<T> where T: Display + PartialEq {
-    fn new(id: T) -> Self {
+    pub fn new(id: T) -> Self {
         Session_ { id, _private: () }
     }
 }
