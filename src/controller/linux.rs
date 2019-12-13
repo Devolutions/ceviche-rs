@@ -7,6 +7,8 @@ use std::sync::mpsc;
 
 use ctrlc;
 use log::{debug, info};
+use systemd_rs::login::monitor::{Category, Monitor};
+use systemd_rs::login::session as login_session;
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
 use crate::session;
@@ -165,6 +167,48 @@ impl ControllerInterface for LinuxController {
     }
 }
 
+fn run_monitor<T: Send + 'static>(tx: mpsc::Sender<ServiceEvent<T>>) -> Result<Monitor, std::io::Error> {
+    let monitor = Monitor::new()?;
+
+    let mut current_session = match login_session::get_active_session() {
+        Ok(s) => Some(s),
+        Err(e) => {
+            debug!("Failed to get active session {}", e);
+            None
+        },
+    };
+
+    monitor.init(Category::Sessions, move || {
+        let active_session = match login_session::get_active_session() {
+            Ok(s) => Some(s),
+            Err(e) => {
+                debug!("Failed to get active session {}", e);
+                None
+            },
+        };
+
+        let session_changed = match (&current_session, &active_session) {
+            (Some(current_session), Some(active_session)) => current_session != active_session,
+            (None, None) => false,
+            _ => true,
+        };
+
+        if session_changed {
+            if let Some(current_session) = current_session.as_ref() {
+                let _ = tx.send(ServiceEvent::SessionDisconnect(Session::new(current_session.identifier.to_string())));
+            }
+
+            if let Some(active_session) = active_session.as_ref() {
+                let _ = tx.send(ServiceEvent::SessionLogon(Session::new(active_session.identifier.to_string())));
+            }
+        }
+
+        current_session = active_session;
+    })?;
+
+    Ok(monitor)
+}
+
 #[macro_export]
 macro_rules! Service {
     ($name:expr, $function:ident) => {
@@ -177,6 +221,7 @@ macro_rules! Service {
 #[doc(hidden)]
 pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
     let (tx, rx) = mpsc::channel();
+    let _monitor = run_monitor(tx.clone()).expect("Failed to run session monitor");
     let _tx = tx.clone();
 
     ctrlc::set_handler(move || {
