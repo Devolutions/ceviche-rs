@@ -9,10 +9,12 @@ use ctrlc;
 use log::info;
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
+use crate::session;
 use crate::Error;
 use crate::ServiceEvent;
 
 type MacosServiceMainWrapperFn = extern "system" fn(args: Vec<String>);
+pub type Session = session::Session_<u32>;
 
 fn gen_service_plist(name: &str) -> String {
     format!(r#"<?xml version="1.0" encoding="UTF-8"?>
