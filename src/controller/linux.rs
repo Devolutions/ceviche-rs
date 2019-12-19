@@ -194,12 +194,12 @@ fn run_monitor<T: Send + 'static>(tx: mpsc::Sender<ServiceEvent<T>>) -> Result<M
         };
 
         if session_changed {
-            if let Some(current_session) = current_session.as_ref() {
-                let _ = tx.send(ServiceEvent::SessionDisconnect(Session::new(current_session.identifier.to_string())));
+            if let Some(active_session) = active_session.as_ref() {
+                let _ = tx.send(ServiceEvent::SessionConnect(Session::new(active_session.identifier.to_string())));
             }
 
-            if let Some(active_session) = active_session.as_ref() {
-                let _ = tx.send(ServiceEvent::SessionLogon(Session::new(active_session.identifier.to_string())));
+            if let Some(current_session) = current_session.as_ref() {
+                let _ = tx.send(ServiceEvent::SessionDisconnect(Session::new(current_session.identifier.to_string())));
             }
         }
 
@@ -221,6 +221,7 @@ macro_rules! Service {
 #[doc(hidden)]
 pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
     let (tx, rx) = mpsc::channel();
+    
     let _monitor = run_monitor(tx.clone()).expect("Failed to run session monitor");
     let _tx = tx.clone();
 

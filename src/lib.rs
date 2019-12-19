@@ -10,8 +10,8 @@
 //!  enum CustomServiceEvent {}
 //!
 //! fn my_service_main(
-//!     rx: mpsc::Receiver<ServiceEvent<u32, CustomServiceEvent>>,
-//!     _tx: mpsc::Sender<ServiceEvent<u32, CustomServiceEvent>>,
+//!     rx: mpsc::Receiver<ServiceEvent<CustomServiceEvent>>,
+//!     _tx: mpsc::Sender<ServiceEvent<CustomServiceEvent>>,
 //!     args: Vec<String>,
 //!     standalone_mode: bool) -> u32 {
 //!    loop {
