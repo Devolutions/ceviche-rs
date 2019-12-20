@@ -23,6 +23,7 @@ cfg_if!{
     } else {
         mod dummy;
         pub use self::dummy::DummyController as Controller;
+        pub use self::dummy::Session as Session;
     }
 }
 
