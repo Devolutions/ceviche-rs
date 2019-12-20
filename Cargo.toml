@@ -1,6 +1,6 @@
 [package]
 name = "ceviche"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2018"
 license = "MIT/Apache-2.0"
 homepage = "https://github.com/wayk/ceviche-rs"
@@ -22,3 +22,6 @@ log = "0.4"
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winbase", "winerror", "winuser", "winsvc", "libloaderapi", "errhandlingapi"] }
 widestring = {version = "0.3"}
+
+[target.'cfg(target_os = "linux")'.dependencies]
+systemd-rs = "0.1.1"

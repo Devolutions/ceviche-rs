@@ -17,6 +17,7 @@ use winapi::um::winsvc::*;
 use winapi::um::winuser::*;
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
+use crate::session;
 use crate::Error;
 use crate::ServiceEvent;
 
@@ -28,6 +29,7 @@ STRUCT!{#[allow(non_snake_case)]
 }}
 
 type WindowsServiceMainWrapperFn = extern "system" fn(argc: DWORD, argv: *mut LPWSTR);
+pub type Session = session::Session_<u32>;
 
 struct Service {
     pub handle: SC_HANDLE,
@@ -334,24 +336,25 @@ unsafe extern "system" fn service_handler<T>(
             let event = event_type as usize;
             let session_notification = event_data as PWTSSESSION_NOTIFICATION;
             let session_id = (*session_notification).dwSessionId;
+            let session = Session::new(session_id);
 
             if event == WTS_CONSOLE_CONNECT || event == WTS_REMOTE_CONNECT {
-                let _ = (*tx).send(ServiceEvent::SessionConnect(session_id));
+                let _ = (*tx).send(ServiceEvent::SessionConnect(session));
                 return 0;
             } else if event == WTS_CONSOLE_DISCONNECT || event == WTS_REMOTE_DISCONNECT {
-                let _ = (*tx).send(ServiceEvent::SessionDisconnect(session_id));
+                let _ = (*tx).send(ServiceEvent::SessionDisconnect(session));
                 return 0;
             } else if event == WTS_SESSION_LOGON {
-                let _ = (*tx).send(ServiceEvent::SessionLogon(session_id));
+                let _ = (*tx).send(ServiceEvent::SessionLogon(session));
                 return 0;
             } else if event == WTS_SESSION_LOGOFF {
-                let _ = (*tx).send(ServiceEvent::SessionLogoff(session_id));
+                let _ = (*tx).send(ServiceEvent::SessionLogoff(session));
                 return 0;
             } else if event == WTS_SESSION_LOCK {
-                let _ = (*tx).send(ServiceEvent::SessionLock(session_id));
+                let _ = (*tx).send(ServiceEvent::SessionLock(session));
                 return 0;
             } else if event == WTS_SESSION_UNLOCK {
-                let _ = (*tx).send(ServiceEvent::SessionUnlock(session_id));
+                let _ = (*tx).send(ServiceEvent::SessionUnlock(session));
                 return 0;
             } else {
                 return 0;
@@ -419,7 +422,12 @@ macro_rules! Service {
 }
 
 #[doc(hidden)]
-pub fn dispatch<T>(service_main: ServiceMainFn<T>, name: &str, argc: DWORD, argv: *mut LPWSTR) {
+pub fn dispatch<T>(
+    service_main: ServiceMainFn<T>, 
+    name: &str, 
+    argc: DWORD, 
+    argv: *mut LPWSTR) 
+{
     let args = get_args(argc, argv);
     let service_name = get_utf16(name);
     let (mut tx, rx) = mpsc::channel();
