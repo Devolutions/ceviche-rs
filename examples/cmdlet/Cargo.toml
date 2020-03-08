@@ -1,24 +1,23 @@
 [package]
-name = "foobar_service"
+name = "cmdlet_service"
 version = "0.1.0"
 edition = "2018"
 license = "MIT/Apache-2.0"
-homepage = "https://github.com/wayk/ceviche-rs"
-repository = "https://github.com/wayk/ceviche-rs"
-authors = ["Marc-André Moreau <marcandre.moreau@gmail.com>"]
-keywords = ["daemon", "service"]
-description = "Rust daemon/service wrapper"
+homepage = "https://github.com/Devolutions/ceviche-rs"
+repository = "https://github.com/Devolutions/ceviche-rs"
+authors = ["Marc-André Moreau <mamoreau@devolutions.net>"]
 
 [[bin]]
-name = "foobar"
+name = "cmdlet-service"
 path = "src/main.rs"
 
 [dependencies]
 libc = "0"
 log = "0.4"
 log4rs = "0.8"
-clap = { version = "2.31", features = ["yaml"] }
 ctrlc = "3.1"
+cfg-if = "0.1"
+which = { version = "3.0", default-features = false, features = [] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winbase", "winuser", "winsvc", "libloaderapi", "errhandlingapi", "winerror"] }
