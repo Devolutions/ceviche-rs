@@ -34,6 +34,18 @@ pub struct ServiceDefinition {
 
 enum CustomServiceEvent {}
 
+pub fn get_cmdlet_name() -> Option<String> {
+    // Detect cmdlet name from service executable name
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(file_stem) = current_exe.as_path().file_stem() {
+            if let Some(cmdlet_name) = file_stem.to_str() {
+                return Some(cmdlet_name.to_string());
+            }
+        }
+    }
+    return None;
+}
+
 pub fn get_service_definition() -> ServiceDefinition {
     let service_json = include_str!("service.json");
     let result = serde_json::from_str(&service_json);
@@ -111,7 +123,7 @@ fn start_cmdlet_service(service_definition: &ServiceDefinition) {
     let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
-    info!("{}: {} / {}", function, stdout, stderr);
+    info!("{}:\n {} {}", function, stdout, stderr);
 }
 
 fn stop_cmdlet_service(service_definition: &ServiceDefinition) {
@@ -120,7 +132,7 @@ fn stop_cmdlet_service(service_definition: &ServiceDefinition) {
     let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
-    info!("{}: {} / {}", function, stdout, stderr);
+    info!("{}:\n {} {}", function, stdout, stderr);
 }
 
 fn cmdlet_service_main(
