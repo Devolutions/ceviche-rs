@@ -2,6 +2,10 @@
 extern crate log;
 extern crate which;
 
+extern crate serde;
+extern crate serde_json;
+use serde::{Serialize, Deserialize};
+
 use std::env;
 use std::sync::mpsc;
 use std::path::{PathBuf};
@@ -16,26 +20,38 @@ use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 
-static SERVICE_NAME: &'static str = "CmdletService";
-static DISPLAY_NAME: &'static str = "Cmdlet Service";
-static DESCRIPTION: &'static str = "PowerShell cmdlet service wrapper";
-
-static CMDLET_VENDOR: &'static str = "PowerShell";
-static CMDLET_NAME: &'static str = "CmdletService";
+#[derive(Serialize, Deserialize)]
+pub struct ServiceDefinition {
+    #[serde(rename = "ServiceName")]
+    pub service_name: String,
+    #[serde(rename = "DisplayName")]
+    pub display_name: String,
+    #[serde(rename = "Description")]
+    pub description: String,
+    #[serde(rename = "CompanyName")]
+    pub company_name: String,
+}
 
 enum CustomServiceEvent {}
 
-pub fn get_config_path() -> PathBuf {
+pub fn get_service_definition() -> ServiceDefinition {
+    let service_json = include_str!("service.json");
+    let result = serde_json::from_str(&service_json);
+    result.unwrap()
+}
+
+pub fn get_config_path(service_definition: &ServiceDefinition) -> PathBuf {
     let program_data = env::var("ProgramData").unwrap();
     let mut config_path = PathBuf::from(program_data);
-    config_path.push(CMDLET_VENDOR);
-    config_path.push(CMDLET_NAME);
+    config_path.push(service_definition.company_name.as_str());
+    config_path.push(service_definition.service_name.as_str());
     config_path
 }
 
-fn init_logging(standalone_mode: bool) -> Option<()> {
-    let mut log_path = get_config_path();
-    log_path.push(format!("{}.log", CMDLET_NAME));
+fn init_logging(service_definition: &ServiceDefinition, standalone_mode: bool) -> Option<()> {
+    let mut log_path = get_config_path(service_definition);
+    let cmdlet_name = service_definition.service_name.as_str();
+    log_path.push(format!("{}.log", cmdlet_name));
 
     if standalone_mode {
         let stdout = ConsoleAppender::builder().build();
@@ -75,9 +91,9 @@ pub fn find_powershell() -> Option<PathBuf> {
     which::which("powershell").ok()
 }
 
-fn run_cmdlet_function(cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
+fn run_cmdlet_function(service_definition: &ServiceDefinition, cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
     let powershell = find_powershell().unwrap();
-    let config_path = get_config_path();
+    let config_path = get_config_path(service_definition);
 
     let command = format!(
         "Import-Module -Name {};\n\
@@ -89,17 +105,19 @@ fn run_cmdlet_function(cmdlet: &str, function: &str) -> std::io::Result<std::pro
         .output()
 }
 
-fn start_cmdlet_service() {
-    let function = format!("Start-{}", CMDLET_NAME);
-    let output = run_cmdlet_function(CMDLET_NAME, &function).unwrap();
+fn start_cmdlet_service(service_definition: &ServiceDefinition) {
+    let cmdlet_name = service_definition.service_name.as_str();
+    let function = format!("Start-{}", cmdlet_name);
+    let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
     info!("{}: {} / {}", function, stdout, stderr);
 }
 
-fn stop_cmdlet_service() {
-    let function = format!("Stop-{}", CMDLET_NAME);
-    let output = run_cmdlet_function(CMDLET_NAME, &function).unwrap();
+fn stop_cmdlet_service(service_definition: &ServiceDefinition) {
+    let cmdlet_name = service_definition.service_name.as_str();
+    let function = format!("Stop-{}", cmdlet_name);
+    let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
     info!("{}: {} / {}", function, stdout, stderr);
@@ -111,18 +129,19 @@ fn cmdlet_service_main(
     args: Vec<String>,
     standalone_mode: bool,
 ) -> u32 {
-    init_logging(standalone_mode);
-    info!("{} service started", CMDLET_NAME);
+    let service_definition = get_service_definition();
+    init_logging(&service_definition, standalone_mode);
+    info!("{} service started", service_definition.service_name.as_str());
     info!("args: {:?}", args);
 
-    start_cmdlet_service();
+    start_cmdlet_service(&service_definition);
 
     loop {
         if let Ok(control_code) = rx.recv() {
             info!("Received control code: {}", control_code);
             match control_code {
                 ServiceEvent::Stop => {
-                    stop_cmdlet_service();
+                    stop_cmdlet_service(&service_definition);
                     break
                 }
                 _ => (),
@@ -130,14 +149,16 @@ fn cmdlet_service_main(
         }
     }
 
-    info!("{} service stopping", CMDLET_NAME);
+    info!("{} service stopping", service_definition.service_name.as_str());
     0
 }
 
 Service!("cmdlet", cmdlet_service_main);
 
 fn main() {
-    let mut controller = Controller::new(SERVICE_NAME, DISPLAY_NAME, DESCRIPTION);
+    let service_definition = get_service_definition();
+    let mut controller = Controller::new(service_definition.service_name.as_str(),
+        service_definition.display_name.as_str(), service_definition.description.as_str());
 
     if let Some(cmd) = env::args().nth(1) {
         match cmd.as_str() {
