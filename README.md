@@ -5,4 +5,4 @@
 [![Build Status](https://api.travis-ci.org/Devolutions/ceviche-rs.svg?branch=master)](https://travis-ci.org/Devolutions/ceviche-rs)
 [![Build Status Appveyor](https://ci.appveyor.com/api/projects/status/qhnntidua2kh041h?svg=true)](https://ci.appveyor.com/project/ekse/ceviche-rs)
 
-Service/daemon wrapper. Supports Windows and OSX.
+Service/daemon wrapper. Supports Windows and macOS.
