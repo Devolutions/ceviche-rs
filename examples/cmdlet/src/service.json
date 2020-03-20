@@ -2,5 +2,6 @@
 	"ServiceName": "WaykDen",
 	"DisplayName": "Wayk Den",
 	"Description": "Wayk Den service",
-	"CompanyName": "Devolutions"
+	"CompanyName": "Devolutions",
+	"WorkingDir": "%ProgramData%\\Devolutions\\WaykDen"
 }

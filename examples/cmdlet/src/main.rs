@@ -10,6 +10,8 @@ use std::env;
 use std::sync::mpsc;
 use std::path::{PathBuf};
 use std::process::{Command};
+use std::fs::File;
+use std::io::BufReader;
 
 use ceviche::controller::*;
 use ceviche::{Service, ServiceEvent};
@@ -30,38 +32,41 @@ pub struct ServiceDefinition {
     pub description: String,
     #[serde(rename = "CompanyName")]
     pub company_name: String,
+    #[serde(rename = "WorkingDir")]
+    pub working_dir: String,
 }
 
 enum CustomServiceEvent {}
 
-pub fn get_cmdlet_name() -> Option<String> {
-    // Detect cmdlet name from service executable name
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(file_stem) = current_exe.as_path().file_stem() {
-            if let Some(cmdlet_name) = file_stem.to_str() {
-                return Some(cmdlet_name.to_string());
-            }
-        }
+pub fn get_base_name() -> Option<String> {
+    let current_exe = std::env::current_exe().ok()?;
+    let base_name = current_exe.as_path().file_stem()?.to_str()?;
+    return Some(base_name.to_string());
+}
+
+pub fn get_service_definition() -> Option<ServiceDefinition> {
+    let base_name = get_base_name()?;
+    let mut manifest_path = std::env::current_exe().ok()?;
+    let manifest_name = format!("{}.service.json", base_name);
+    manifest_path.set_file_name(manifest_name.as_str());
+    if !manifest_path.exists() {
+        let manifest_name = "service.json".to_string();
+        manifest_path.set_file_name(manifest_name.as_str());
     }
-    return None;
+    println!("Manifest: {}", manifest_path.as_path().to_str().unwrap());
+    let file = File::open(manifest_path.as_path()).ok()?;
+    let result = serde_json::from_reader(BufReader::new(file));
+    result.ok()
 }
 
-pub fn get_service_definition() -> ServiceDefinition {
-    let service_json = include_str!("service.json");
-    let result = serde_json::from_str(&service_json);
-    result.unwrap()
-}
-
-pub fn get_config_path(service_definition: &ServiceDefinition) -> PathBuf {
-    let program_data = env::var("ProgramData").unwrap();
-    let mut config_path = PathBuf::from(program_data);
-    config_path.push(service_definition.company_name.as_str());
-    config_path.push(service_definition.service_name.as_str());
-    config_path
+pub fn get_working_dir(service_definition: &ServiceDefinition) -> Option<PathBuf> {
+    let working_dir = expand_str::expand_string_with_env(service_definition.working_dir.as_str()).ok()?;
+    println!("WorkingDir: {}", working_dir.as_str());
+    return Some(PathBuf::from(working_dir));
 }
 
 fn init_logging(service_definition: &ServiceDefinition, standalone_mode: bool) -> Option<()> {
-    let mut log_path = get_config_path(service_definition);
+    let mut log_path = get_working_dir(service_definition)?;
     let cmdlet_name = service_definition.service_name.as_str();
     log_path.push(format!("{}.log", cmdlet_name));
 
@@ -105,7 +110,7 @@ pub fn find_powershell() -> Option<PathBuf> {
 
 fn run_cmdlet_function(service_definition: &ServiceDefinition, cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
     let powershell = find_powershell().unwrap();
-    let config_path = get_config_path(service_definition);
+    let working_dir = get_working_dir(service_definition).unwrap();
 
     let command = format!(
         "Import-Module -Name {};\n\
@@ -113,7 +118,7 @@ fn run_cmdlet_function(service_definition: &ServiceDefinition, cmdlet: &str, fun
 
     Command::new(&powershell)
         .arg("-Command").arg(&command)
-        .current_dir(config_path)
+        .current_dir(working_dir)
         .output()
 }
 
@@ -141,7 +146,7 @@ fn cmdlet_service_main(
     args: Vec<String>,
     standalone_mode: bool,
 ) -> u32 {
-    let service_definition = get_service_definition();
+    let service_definition = get_service_definition().unwrap();
     init_logging(&service_definition, standalone_mode);
     info!("{} service started", service_definition.service_name.as_str());
     info!("args: {:?}", args);
@@ -168,7 +173,7 @@ fn cmdlet_service_main(
 Service!("cmdlet", cmdlet_service_main);
 
 fn main() {
-    let service_definition = get_service_definition();
+    let service_definition = get_service_definition().unwrap();
     let mut controller = Controller::new(service_definition.service_name.as_str(),
         service_definition.display_name.as_str(), service_definition.description.as_str());
 
