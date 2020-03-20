@@ -34,6 +34,22 @@ pub struct ServiceDefinition {
     pub company_name: String,
     #[serde(rename = "WorkingDir")]
     pub working_dir: String,
+    #[serde(rename = "ModuleName")]
+    pub module_name: String,
+    #[serde(rename = "StartCommand")]
+    pub start_command: String,
+    #[serde(rename = "StopCommand")]
+    pub stop_command: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PSModuleManifest {
+    #[serde(rename = "ModuleVersion")]
+    pub module_version: String,
+    #[serde(rename = "CompanyName")]
+    pub company_name: String,
+    #[serde(rename = "Description")]
+    pub description: String,
 }
 
 enum CustomServiceEvent {}
@@ -108,6 +124,38 @@ pub fn find_powershell() -> Option<PathBuf> {
     which::which("powershell").ok()
 }
 
+fn find_cmdlet_base(module_name: &str) -> Option<PathBuf> {
+    let powershell = find_powershell()?;
+
+    let command = format!(
+        "Get-Module -Name {} -ListAvailable | Select-Object -First 1 | % ModuleBase",
+        module_name);
+
+    let output = Command::new(&powershell)
+        .arg("-Command").arg(&command)
+        .output().ok()?;
+
+    let module_base = String::from_utf8(output.stdout).ok()?;
+    return Some(PathBuf::from(module_base.trim()));
+}
+
+pub fn get_ps_module_manifest(module_name: &str) -> Option<PSModuleManifest> {
+    let powershell = find_powershell()?;
+    let manifest_path = find_cmdlet_base(module_name)?;
+    let manifest_path = manifest_path.as_path().to_str()?;
+
+    let command = format!(
+        "Import-PowerShellDataFile -Path \"{}\\{}.psd1\" | ConvertTo-Json",
+        manifest_path, module_name);
+
+    let output = Command::new(&powershell)
+        .arg("-Command").arg(&command)
+        .output().ok()?;
+
+    let json_output = String::from_utf8(output.stdout).ok()?;
+    serde_json::from_str(json_output.as_str()).ok()
+}
+
 fn run_cmdlet_function(service_definition: &ServiceDefinition, cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
     let powershell = find_powershell().unwrap();
     let working_dir = get_working_dir(service_definition).unwrap();
@@ -123,8 +171,8 @@ fn run_cmdlet_function(service_definition: &ServiceDefinition, cmdlet: &str, fun
 }
 
 fn start_cmdlet_service(service_definition: &ServiceDefinition) {
-    let cmdlet_name = service_definition.service_name.as_str();
-    let function = format!("Start-{}", cmdlet_name);
+    let cmdlet_name = service_definition.module_name.as_str();
+    let function = service_definition.start_command.as_str();
     let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
@@ -132,8 +180,8 @@ fn start_cmdlet_service(service_definition: &ServiceDefinition) {
 }
 
 fn stop_cmdlet_service(service_definition: &ServiceDefinition) {
-    let cmdlet_name = service_definition.service_name.as_str();
-    let function = format!("Stop-{}", cmdlet_name);
+    let cmdlet_name = service_definition.module_name.as_str();
+    let function = service_definition.start_command.as_str();
     let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
@@ -147,6 +195,16 @@ fn cmdlet_service_main(
     standalone_mode: bool,
 ) -> u32 {
     let service_definition = get_service_definition().unwrap();
+    let module_name = service_definition.module_name.as_str();
+    if let Some(module_base) = find_cmdlet_base(module_name) {
+        println!("Using module {} from {}", module_name, module_base.as_path().to_str().unwrap());
+    }
+    if let Some(module_manifest) = get_ps_module_manifest(module_name) {
+        println!("ModuleVersion: {}\nCompanyName: {}\nDescription: {}",
+            module_manifest.module_version.as_str(),
+            module_manifest.company_name.as_str(),
+            module_manifest.description.as_str());
+    }
     init_logging(&service_definition, standalone_mode);
     info!("{} service started", service_definition.service_name.as_str());
     info!("args: {:?}", args);
