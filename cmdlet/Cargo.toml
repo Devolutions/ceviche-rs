@@ -7,10 +7,6 @@ homepage = "https://github.com/Devolutions/ceviche-rs"
 repository = "https://github.com/Devolutions/ceviche-rs"
 authors = ["Marc-André Moreau <mamoreau@devolutions.net>"]
 
-[[bin]]
-name = "cmdlet-service"
-path = "src/main.rs"
-
 [dependencies]
 libc = "0"
 log = "0.4"

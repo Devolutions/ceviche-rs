@@ -22,6 +22,9 @@ use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 
+mod pwsh;
+use pwsh::*;
+
 #[derive(Serialize, Deserialize)]
 pub struct CmdletService {
     #[serde(rename = "ServiceName")]
@@ -53,13 +56,13 @@ pub struct ServiceManifest {
     #[serde(rename = "CompanyName")]
     pub company_name: Option<String>,
     #[serde(rename = "WorkingDir")]
-    pub working_dir: Option<String>,
+    pub working_dir: String,
     #[serde(rename = "ModuleName")]
     pub module_name: Option<String>,
     #[serde(rename = "StartCommand")]
-    pub start_command: Option<String>,
+    pub start_command: String,
     #[serde(rename = "StopCommand")]
-    pub stop_command: Option<String>,
+    pub stop_command: String,
 }
 
 impl ServiceManifest {
@@ -69,16 +72,6 @@ impl ServiceManifest {
         }
         return self.service_name.as_str();
     }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PSModuleManifest {
-    #[serde(rename = "ModuleVersion")]
-    pub module_version: String,
-    #[serde(rename = "CompanyName")]
-    pub company_name: String,
-    #[serde(rename = "Description")]
-    pub description: String,
 }
 
 enum CustomServiceEvent {}
@@ -98,7 +91,6 @@ pub fn get_service_manifest() -> Option<ServiceManifest> {
         let manifest_name = "service.json".to_string();
         manifest_path.set_file_name(manifest_name.as_str());
     }
-    println!("Manifest: {}", manifest_path.as_path().to_str().unwrap());
     let file = File::open(manifest_path.as_path()).ok()?;
     let result = serde_json::from_reader(BufReader::new(file));
     result.ok()
@@ -114,9 +106,9 @@ impl CmdletService {
         let display_name = service_manifest.display_name.unwrap_or(service_name.to_string());
         let description = service_manifest.description.unwrap_or(module_manifest.description.to_string());
         let company_name = service_manifest.company_name.unwrap_or(module_manifest.company_name.to_string());
-        let working_dir = service_manifest.working_dir.unwrap().to_string();
-        let start_command = service_manifest.start_command.unwrap().to_string();
-        let stop_command = service_manifest.stop_command.unwrap().to_string();
+        let working_dir = service_manifest.working_dir.to_string();
+        let start_command = service_manifest.start_command.to_string();
+        let stop_command = service_manifest.stop_command.to_string();
     
         Some(CmdletService {
             service_name: service_name.to_string(),
@@ -135,14 +127,48 @@ impl CmdletService {
         return Some(PathBuf::from(working_dir));
     }
 
+    pub fn get_service_name(&self) -> &str {
+        self.service_name.as_str()
+    }
+
+    pub fn get_description(&self) -> &str {
+        self.service_name.as_str()
+    }
+
     pub fn get_module_name(&self) -> &str {
         self.module_name.as_str()
     }
+
+    pub fn get_start_command(&self) -> &str {
+        self.start_command.as_str()
+    }
+
+    pub fn get_stop_command(&self) -> &str {
+        self.stop_command.as_str()
+    }
+
+    pub fn start(&self) {
+        let cmdlet_name = self.get_module_name();
+        let function = self.get_start_command();
+        let output = run_cmdlet_function(self, cmdlet_name, &function).unwrap();
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        info!("{}:\n {} {}", function, stdout, stderr);
+    }
+
+    pub fn stop(&self) {
+        let cmdlet_name = self.get_module_name();
+        let function = self.get_stop_command();
+        let output = run_cmdlet_function(self, cmdlet_name, &function).unwrap();
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        info!("{}:\n {} {}", function, stdout, stderr);
+    }
 }
 
-fn init_logging(service_definition: &CmdletService, standalone_mode: bool) -> Option<()> {
-    let mut log_path = service_definition.get_working_dir()?;
-    let cmdlet_name = service_definition.get_module_name();
+fn init_logging(service: &CmdletService, standalone_mode: bool) -> Option<()> {
+    let mut log_path = service.get_working_dir()?;
+    let cmdlet_name = service.get_module_name();
     log_path.push(format!("{}.log", cmdlet_name));
 
     if standalone_mode {
@@ -176,48 +202,9 @@ fn init_logging(service_definition: &CmdletService, standalone_mode: bool) -> Op
     Some(())
 }
 
-pub fn find_powershell() -> Option<PathBuf> {
-    if let Ok(powershell) = which::which("pwsh") {
-        return Some(powershell);
-    }
-    which::which("powershell").ok()
-}
-
-fn find_cmdlet_base(module_name: &str) -> Option<PathBuf> {
-    let powershell = find_powershell()?;
-
-    let command = format!(
-        "Get-Module -Name {} -ListAvailable | Select-Object -First 1 | % ModuleBase",
-        module_name);
-
-    let output = Command::new(&powershell)
-        .arg("-Command").arg(&command)
-        .output().ok()?;
-
-    let module_base = String::from_utf8(output.stdout).ok()?;
-    return Some(PathBuf::from(module_base.trim()));
-}
-
-pub fn get_module_manifest(module_name: &str) -> Option<PSModuleManifest> {
-    let powershell = find_powershell()?;
-    let manifest_path = find_cmdlet_base(module_name)?;
-    let manifest_path = manifest_path.as_path().to_str()?;
-
-    let command = format!(
-        "Import-PowerShellDataFile -Path \"{}\\{}.psd1\" | ConvertTo-Json",
-        manifest_path, module_name);
-
-    let output = Command::new(&powershell)
-        .arg("-Command").arg(&command)
-        .output().ok()?;
-
-    let json_output = String::from_utf8(output.stdout).ok()?;
-    serde_json::from_str(json_output.as_str()).ok()
-}
-
-fn run_cmdlet_function(service_definition: &CmdletService, cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
+fn run_cmdlet_function(service: &CmdletService, cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
     let powershell = find_powershell().unwrap();
-    let working_dir = service_definition.get_working_dir().unwrap();
+    let working_dir = service.get_working_dir().unwrap();
 
     let command = format!(
         "Import-Module -Name {};\n\
@@ -229,47 +216,29 @@ fn run_cmdlet_function(service_definition: &CmdletService, cmdlet: &str, functio
         .output()
 }
 
-fn start_cmdlet_service(service_definition: &CmdletService) {
-    let cmdlet_name = service_definition.module_name.as_str();
-    let function = service_definition.start_command.as_str();
-    let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    info!("{}:\n {} {}", function, stdout, stderr);
-}
-
-fn stop_cmdlet_service(service_definition: &CmdletService) {
-    let cmdlet_name = service_definition.module_name.as_str();
-    let function = service_definition.start_command.as_str();
-    let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    info!("{}:\n {} {}", function, stdout, stderr);
-}
-
 fn cmdlet_service_main(
     rx: mpsc::Receiver<ServiceEvent<CustomServiceEvent>>,
     _tx: mpsc::Sender<ServiceEvent<CustomServiceEvent>>,
     args: Vec<String>,
     standalone_mode: bool,
 ) -> u32 {
-    let service_definition = CmdletService::load().expect("unable to load service manifest");
-    let module_name = service_definition.module_name.as_str();
+    let service = CmdletService::load().expect("unable to load service manifest");
+    let module_name = service.get_module_name();
     if let Some(module_base) = find_cmdlet_base(module_name) {
         println!("Using module {} from {}", module_name, module_base.as_path().to_str().unwrap());
     }
-    init_logging(&service_definition, standalone_mode);
-    info!("{} service started", service_definition.service_name.as_str());
+    init_logging(&service, standalone_mode);
+    info!("{} service started", service.get_service_name());
     info!("args: {:?}", args);
 
-    start_cmdlet_service(&service_definition);
+    service.start();
 
     loop {
         if let Ok(control_code) = rx.recv() {
             info!("Received control code: {}", control_code);
             match control_code {
                 ServiceEvent::Stop => {
-                    stop_cmdlet_service(&service_definition);
+                    service.stop();
                     break
                 }
                 _ => (),
@@ -277,16 +246,16 @@ fn cmdlet_service_main(
         }
     }
 
-    info!("{} service stopping", service_definition.service_name.as_str());
+    info!("{} service stopping", service.get_service_name());
     0
 }
 
 Service!("cmdlet", cmdlet_service_main);
 
 fn main() {
-    let service_definition = CmdletService::load().unwrap();
-    let mut controller = Controller::new(service_definition.service_name.as_str(),
-        service_definition.display_name.as_str(), service_definition.description.as_str());
+    let service = CmdletService::load().unwrap();
+    let mut controller = Controller::new(service.service_name.as_str(),
+        service.display_name.as_str(), service.description.as_str());
 
     if let Some(cmd) = env::args().nth(1) {
         match cmd.as_str() {
