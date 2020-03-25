@@ -26,4 +26,4 @@ expand_str = "0.1"
 winapi = { version = "0.3", features = ["winbase", "winuser", "winsvc", "libloaderapi", "errhandlingapi", "winerror"] }
 
 [dependencies.ceviche]
-path = "../.."
+path = ".."
