@@ -23,7 +23,7 @@ use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 
 #[derive(Serialize, Deserialize)]
-pub struct ServiceDefinition {
+pub struct CmdletService {
     #[serde(rename = "ServiceName")]
     pub service_name: String,
     #[serde(rename = "DisplayName")]
@@ -40,6 +40,35 @@ pub struct ServiceDefinition {
     pub start_command: String,
     #[serde(rename = "StopCommand")]
     pub stop_command: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ServiceManifest {
+    #[serde(rename = "ServiceName")]
+    pub service_name: String,
+    #[serde(rename = "DisplayName")]
+    pub display_name: Option<String>,
+    #[serde(rename = "Description")]
+    pub description: Option<String>,
+    #[serde(rename = "CompanyName")]
+    pub company_name: Option<String>,
+    #[serde(rename = "WorkingDir")]
+    pub working_dir: Option<String>,
+    #[serde(rename = "ModuleName")]
+    pub module_name: Option<String>,
+    #[serde(rename = "StartCommand")]
+    pub start_command: Option<String>,
+    #[serde(rename = "StopCommand")]
+    pub stop_command: Option<String>,
+}
+
+impl ServiceManifest {
+    pub fn get_module_name(&self) -> &str {
+        if let Some(module_name) = &self.module_name {
+            return module_name.as_str();
+        }
+        return self.service_name.as_str();
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -60,7 +89,7 @@ pub fn get_base_name() -> Option<String> {
     return Some(base_name.to_string());
 }
 
-pub fn get_service_definition() -> Option<ServiceDefinition> {
+pub fn get_service_manifest() -> Option<ServiceManifest> {
     let base_name = get_base_name()?;
     let mut manifest_path = std::env::current_exe().ok()?;
     let manifest_name = format!("{}.service.json", base_name);
@@ -75,15 +104,45 @@ pub fn get_service_definition() -> Option<ServiceDefinition> {
     result.ok()
 }
 
-pub fn get_working_dir(service_definition: &ServiceDefinition) -> Option<PathBuf> {
-    let working_dir = expand_str::expand_string_with_env(service_definition.working_dir.as_str()).ok()?;
-    println!("WorkingDir: {}", working_dir.as_str());
-    return Some(PathBuf::from(working_dir));
+impl CmdletService {
+    fn load() -> Option<Self> {
+        let service_manifest = get_service_manifest()?;
+        let module_name = service_manifest.get_module_name().to_string();
+        let module_manifest = get_module_manifest(&module_name)?;
+    
+        let service_name = service_manifest.service_name.to_string();
+        let display_name = service_manifest.display_name.unwrap_or(service_name.to_string());
+        let description = service_manifest.description.unwrap_or(module_manifest.description.to_string());
+        let company_name = service_manifest.company_name.unwrap_or(module_manifest.company_name.to_string());
+        let working_dir = service_manifest.working_dir.unwrap().to_string();
+        let start_command = service_manifest.start_command.unwrap().to_string();
+        let stop_command = service_manifest.stop_command.unwrap().to_string();
+    
+        Some(CmdletService {
+            service_name: service_name.to_string(),
+            display_name: display_name.to_string(),
+            description: description.to_string(),
+            company_name: company_name.to_string(),
+            working_dir: working_dir.to_string(),
+            module_name: module_name.to_string(),
+            start_command: start_command.to_string(),
+            stop_command: stop_command.to_string(),
+        })
+    }
+
+    pub fn get_working_dir(&self) -> Option<PathBuf> {
+        let working_dir = expand_str::expand_string_with_env(self.working_dir.as_str()).ok()?;
+        return Some(PathBuf::from(working_dir));
+    }
+
+    pub fn get_module_name(&self) -> &str {
+        self.module_name.as_str()
+    }
 }
 
-fn init_logging(service_definition: &ServiceDefinition, standalone_mode: bool) -> Option<()> {
-    let mut log_path = get_working_dir(service_definition)?;
-    let cmdlet_name = service_definition.service_name.as_str();
+fn init_logging(service_definition: &CmdletService, standalone_mode: bool) -> Option<()> {
+    let mut log_path = service_definition.get_working_dir()?;
+    let cmdlet_name = service_definition.get_module_name();
     log_path.push(format!("{}.log", cmdlet_name));
 
     if standalone_mode {
@@ -139,7 +198,7 @@ fn find_cmdlet_base(module_name: &str) -> Option<PathBuf> {
     return Some(PathBuf::from(module_base.trim()));
 }
 
-pub fn get_ps_module_manifest(module_name: &str) -> Option<PSModuleManifest> {
+pub fn get_module_manifest(module_name: &str) -> Option<PSModuleManifest> {
     let powershell = find_powershell()?;
     let manifest_path = find_cmdlet_base(module_name)?;
     let manifest_path = manifest_path.as_path().to_str()?;
@@ -156,9 +215,9 @@ pub fn get_ps_module_manifest(module_name: &str) -> Option<PSModuleManifest> {
     serde_json::from_str(json_output.as_str()).ok()
 }
 
-fn run_cmdlet_function(service_definition: &ServiceDefinition, cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
+fn run_cmdlet_function(service_definition: &CmdletService, cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
     let powershell = find_powershell().unwrap();
-    let working_dir = get_working_dir(service_definition).unwrap();
+    let working_dir = service_definition.get_working_dir().unwrap();
 
     let command = format!(
         "Import-Module -Name {};\n\
@@ -170,7 +229,7 @@ fn run_cmdlet_function(service_definition: &ServiceDefinition, cmdlet: &str, fun
         .output()
 }
 
-fn start_cmdlet_service(service_definition: &ServiceDefinition) {
+fn start_cmdlet_service(service_definition: &CmdletService) {
     let cmdlet_name = service_definition.module_name.as_str();
     let function = service_definition.start_command.as_str();
     let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
@@ -179,7 +238,7 @@ fn start_cmdlet_service(service_definition: &ServiceDefinition) {
     info!("{}:\n {} {}", function, stdout, stderr);
 }
 
-fn stop_cmdlet_service(service_definition: &ServiceDefinition) {
+fn stop_cmdlet_service(service_definition: &CmdletService) {
     let cmdlet_name = service_definition.module_name.as_str();
     let function = service_definition.start_command.as_str();
     let output = run_cmdlet_function(service_definition, cmdlet_name, &function).unwrap();
@@ -194,16 +253,10 @@ fn cmdlet_service_main(
     args: Vec<String>,
     standalone_mode: bool,
 ) -> u32 {
-    let service_definition = get_service_definition().unwrap();
+    let service_definition = CmdletService::load().expect("unable to load service manifest");
     let module_name = service_definition.module_name.as_str();
     if let Some(module_base) = find_cmdlet_base(module_name) {
         println!("Using module {} from {}", module_name, module_base.as_path().to_str().unwrap());
-    }
-    if let Some(module_manifest) = get_ps_module_manifest(module_name) {
-        println!("ModuleVersion: {}\nCompanyName: {}\nDescription: {}",
-            module_manifest.module_version.as_str(),
-            module_manifest.company_name.as_str(),
-            module_manifest.description.as_str());
     }
     init_logging(&service_definition, standalone_mode);
     info!("{} service started", service_definition.service_name.as_str());
@@ -231,7 +284,7 @@ fn cmdlet_service_main(
 Service!("cmdlet", cmdlet_service_main);
 
 fn main() {
-    let service_definition = get_service_definition().unwrap();
+    let service_definition = CmdletService::load().unwrap();
     let mut controller = Controller::new(service_definition.service_name.as_str(),
         service_definition.display_name.as_str(), service_definition.description.as_str());
 
