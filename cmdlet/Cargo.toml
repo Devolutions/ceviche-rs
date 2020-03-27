@@ -1,0 +1,25 @@
+[package]
+name = "cmdlet_service"
+version = "0.1.0"
+edition = "2018"
+license = "MIT/Apache-2.0"
+homepage = "https://github.com/Devolutions/ceviche-rs"
+repository = "https://github.com/Devolutions/ceviche-rs"
+authors = ["Marc-André Moreau <mamoreau@devolutions.net>"]
+
+[dependencies]
+libc = "0"
+log = "0.4"
+log4rs = "0.8"
+ctrlc = "3.1"
+cfg-if = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+which = { version = "3.0", default-features = false, features = [] }
+expand_str = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winbase", "winuser", "winsvc", "libloaderapi", "errhandlingapi", "winerror"] }
+
+[dependencies.ceviche]
+path = ".."

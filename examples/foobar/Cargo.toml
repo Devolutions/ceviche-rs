@@ -1,5 +1,5 @@
 [package]
-name = "example_service"
+name = "foobar_service"
 version = "0.1.0"
 edition = "2018"
 license = "MIT/Apache-2.0"
@@ -24,4 +24,4 @@ ctrlc = "3.1"
 winapi = { version = "0.3", features = ["winbase", "winuser", "winsvc", "libloaderapi", "errhandlingapi", "winerror"] }
 
 [dependencies.ceviche]
-path = ".."
+path = "../.."
