@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(unused_imports)]
 
 #[cfg(target_os = "windows")]
 extern crate embed_resource;
@@ -75,7 +76,7 @@ END
 }
 
 fn main() {
-    if cfg!(target_os = "windows") {
+    #[cfg(target_os = "windows")] {
         let out_dir = env::var("OUT_DIR").unwrap();
         let version_rc_file = format!("{}/version.rc", out_dir);
         let version_rc_data = generate_version_rc();
