@@ -7,24 +7,16 @@ use serde::{Serialize, Deserialize};
 
 use crate::pwsh::*;
 
-#[derive(Serialize, Deserialize)]
 pub struct CmdletService {
-    #[serde(rename = "ServiceName")]
     pub service_name: String,
-    #[serde(rename = "DisplayName")]
     pub display_name: String,
-    #[serde(rename = "Description")]
     pub description: String,
-    #[serde(rename = "CompanyName")]
     pub company_name: String,
-    #[serde(rename = "WorkingDir")]
     pub working_dir: String,
-    #[serde(rename = "ModuleName")]
     pub module_name: String,
-    #[serde(rename = "StartCommand")]
     pub start_command: String,
-    #[serde(rename = "StopCommand")]
     pub stop_command: String,
+    pub log_file: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -45,6 +37,8 @@ pub struct ServiceManifest {
     pub start_command: String,
     #[serde(rename = "StopCommand")]
     pub stop_command: String,
+    #[serde(rename = "LogFile")]
+    pub log_file: Option<String>,
 }
 
 impl ServiceManifest {
@@ -89,6 +83,7 @@ impl CmdletService {
         let working_dir = service_manifest.working_dir.to_string();
         let start_command = service_manifest.start_command.to_string();
         let stop_command = service_manifest.stop_command.to_string();
+        let log_file = service_manifest.log_file.unwrap_or(format!("{}.log", service_name.as_str()));
     
         Some(CmdletService {
             service_name: service_name.to_string(),
@@ -99,12 +94,17 @@ impl CmdletService {
             module_name: module_name.to_string(),
             start_command: start_command.to_string(),
             stop_command: stop_command.to_string(),
+            log_file: log_file.to_string(),
         })
     }
 
     pub fn get_working_dir(&self) -> Option<PathBuf> {
         let working_dir = expand_str::expand_string_with_env(self.working_dir.as_str()).ok()?;
         return Some(PathBuf::from(working_dir));
+    }
+
+    pub fn get_log_file(&self) -> PathBuf {
+        PathBuf::from(self.log_file.as_str())
     }
 
     pub fn get_service_name(&self) -> &str {
