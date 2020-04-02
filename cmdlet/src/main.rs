@@ -25,7 +25,9 @@ use service::CmdletService;
 enum CustomServiceEvent {}
 
 fn init_logging(service: &CmdletService, standalone_mode: bool) -> Option<()> {
+    let mut log_path = service.get_working_dir()?;
     let log_file = service.get_log_file();
+    log_path.push(log_file);
 
     if standalone_mode {
         let stdout = ConsoleAppender::builder().build();
@@ -41,7 +43,7 @@ fn init_logging(service: &CmdletService, standalone_mode: bool) -> Option<()> {
             .encoder(Box::new(PatternEncoder::new(
                 "{d(%Y-%m-%d %H:%M:%S)} {M} [{h({l})}] - {m}{n}",
             )))
-            .build(log_file)
+            .build(log_path)
             .ok()?;
 
         let config = Config::builder()
