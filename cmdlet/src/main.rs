@@ -5,6 +5,8 @@ extern crate which;
 extern crate serde;
 extern crate serde_json;
 
+extern crate base64;
+
 use std::env;
 use std::sync::mpsc;
 
@@ -93,7 +95,7 @@ fn cmdlet_service_main(
 Service!("cmdlet", cmdlet_service_main);
 
 fn main() {
-    let service = CmdletService::load().unwrap();
+    let service = CmdletService::load().expect("unable to load cmdlet service");
     let mut controller = Controller::new(service.get_service_name(),
         service.get_display_name(), service.get_description());
 

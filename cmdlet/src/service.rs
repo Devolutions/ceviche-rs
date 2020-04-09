@@ -134,32 +134,34 @@ impl CmdletService {
     pub fn start(&self) {
         let cmdlet_name = self.get_module_name();
         let function = self.get_start_command();
-        let output = run_cmdlet_function(self, cmdlet_name, &function).unwrap();
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let stderr = String::from_utf8(output.stderr).unwrap();
+        let output = run_cmdlet_function(self, cmdlet_name, &function).expect("unable to run cmdlet function");
+        let stdout = String::from_utf8(output.stdout).expect("unable to convert output.stdout");
+        let stderr = String::from_utf8(output.stderr).expect("unable to convert output.stderr");
         info!("{}:\n {} {}", function, stdout, stderr);
     }
 
     pub fn stop(&self) {
         let cmdlet_name = self.get_module_name();
         let function = self.get_stop_command();
-        let output = run_cmdlet_function(self, cmdlet_name, &function).unwrap();
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let stderr = String::from_utf8(output.stderr).unwrap();
+        let output = run_cmdlet_function(self, cmdlet_name, &function).expect("unable to run cmdlet function");
+        let stdout = String::from_utf8(output.stdout).expect("unable to convert output.stdout");
+        let stderr = String::from_utf8(output.stderr).expect("unable to convert output.stderr");
         info!("{}:\n {} {}", function, stdout, stderr);
     }
 }
 
 fn run_cmdlet_function(service: &CmdletService, cmdlet: &str, function: &str) -> std::io::Result<std::process::Output> {
-    let powershell = find_powershell().unwrap();
-    let working_dir = service.get_working_dir().unwrap();
+    let powershell = find_powershell().expect("unable to find PowerShell");
+    let working_dir = service.get_working_dir().expect("unable to get working directory");
 
     let command = format!(
         "Import-Module -Name {};\n\
         {}", cmdlet, function);
 
+    let encoded_command = encode_command(command.as_str());
+
     Command::new(&powershell)
-        .arg("-Command").arg(&command)
+        .arg("-EncodedCommand").arg(encoded_command.as_str())
         .current_dir(working_dir)
         .output()
 }

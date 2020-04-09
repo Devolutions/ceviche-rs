@@ -20,15 +20,27 @@ pub fn find_powershell() -> Option<PathBuf> {
     which::which("powershell").ok()
 }
 
+pub fn encode_command(command: &str) -> String {
+    let mut command_bytes: Vec<u8> = Vec::new();
+    for c in command.encode_utf16() {
+        let b = c.to_le_bytes();
+        command_bytes.push(b[0]);
+        command_bytes.push(b[1]);
+    }
+    base64::encode(command_bytes.as_slice())
+}
+
 pub fn find_cmdlet_base(module_name: &str) -> Option<PathBuf> {
     let powershell = find_powershell()?;
 
     let command = format!(
-        "Get-Module -Name {} -ListAvailable | Select-Object -First 1 | % ModuleBase",
+        "Get-Module -Name {} -ListAvailable | Select-Object -First 1 | foreach {{ $_.ModuleBase }}",
         module_name);
 
+    let encoded_command = encode_command(command.as_str());
+
     let output = Command::new(&powershell)
-        .arg("-Command").arg(&command)
+        .arg("-EncodedCommand").arg(encoded_command.as_str())
         .output().ok()?;
 
     let module_base = String::from_utf8(output.stdout).ok()?;
@@ -44,8 +56,10 @@ pub fn get_module_manifest(module_name: &str) -> Option<PSModuleManifest> {
         "Import-PowerShellDataFile -Path \"{}\\{}.psd1\" | ConvertTo-Json",
         manifest_path, module_name);
 
+    let encoded_command = encode_command(command.as_str());
+
     let output = Command::new(&powershell)
-        .arg("-Command").arg(&command)
+        .arg("-EncodedCommand").arg(encoded_command.as_str())
         .output().ok()?;
 
     let json_output = String::from_utf8(output.stdout).ok()?;
