@@ -97,6 +97,7 @@ pub struct MacosController {
     pub service_name: String,
     pub display_name: String,
     pub description: String,
+    pub plist: Option<String>,
 }
 
 impl MacosController {
@@ -105,6 +106,7 @@ impl MacosController {
             service_name: service_name.to_string(),
             display_name: display_name.to_string(),
             description: description.to_string(),
+            plist: None,
         }
     }
 
@@ -119,10 +121,15 @@ impl MacosController {
 
     fn write_plist(&self, path: &Path) -> Result<(), Error> {
         info!("Writing plist file {}", path.display());
-        let plist_content = gen_service_plist(&self.service_name);
+        let plist_content =
+        match &self.plist {
+            Some(ref plist) => plist.to_string(),
+            None => gen_service_plist(&self.service_name),
+        };
         File::create(path)
             .and_then(|mut file| file.write_all(plist_content.as_bytes()))
             .map_err(|e| Error::new(&format!("Failed to write {}: {}", path.display(), e)))
+
     }
 }
 
@@ -131,6 +138,7 @@ impl ControllerInterface for MacosController {
     fn create(&mut self) -> Result<(), Error> {
         let plist_path =
             Path::new("/Library/LaunchDaemons/").join(format!("{}.plist", &self.service_name));
+            
         self.write_plist(&plist_path)?;
         launchctl_load_daemon(&plist_path)
     }
