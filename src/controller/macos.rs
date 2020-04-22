@@ -139,7 +139,7 @@ impl ControllerInterface for MacosController {
     /// Creates the service on the system.
     fn create(&mut self) -> Result<(), Error> {
         let plist_path = Path::new("/Library/")
-        .join(if self.is_agent == true { "LaunchAgents/" } else { "LaunchDaemons/"})
+        .join(if self.is_agent { "LaunchAgents/" } else { "LaunchDaemons/"})
         .join(format!("{}.plist", &self.service_name));
             
         self.write_plist(&plist_path)?;
@@ -148,7 +148,7 @@ impl ControllerInterface for MacosController {
     /// Deletes the service.
     fn delete(&mut self) -> Result<(), Error> {
         let plist_path = Path::new("/Library/")
-        .join(if self.is_agent == true { "LaunchAgents/" } else { "LaunchDaemons/"})
+        .join(if self.is_agent { "LaunchAgents/" } else { "LaunchDaemons/"})
         .join(format!("{}.plist", &self.service_name));
 
         launchctl_unload_daemon(&plist_path)?;
