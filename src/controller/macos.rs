@@ -98,6 +98,7 @@ pub struct MacosController {
     pub display_name: String,
     pub description: String,
     pub plist: Option<String>,
+    pub is_agent: bool,
 }
 
 impl MacosController {
@@ -107,6 +108,7 @@ impl MacosController {
             display_name: display_name.to_string(),
             description: description.to_string(),
             plist: None,
+            is_agent: false
         }
     }
 
@@ -136,16 +138,19 @@ impl MacosController {
 impl ControllerInterface for MacosController {
     /// Creates the service on the system.
     fn create(&mut self) -> Result<(), Error> {
-        let plist_path =
-            Path::new("/Library/LaunchDaemons/").join(format!("{}.plist", &self.service_name));
+        let plist_path = Path::new("/Library/")
+        .join(if self.is_agent == true { "LaunchAgents/" } else { "LaunchDaemons/"})
+        .join(format!("{}.plist", &self.service_name));
             
         self.write_plist(&plist_path)?;
         launchctl_load_daemon(&plist_path)
     }
     /// Deletes the service.
     fn delete(&mut self) -> Result<(), Error> {
-        let plist_path =
-            Path::new("/Library/LaunchDaemons/").join(format!("{}.plist", &self.service_name));
+        let plist_path = Path::new("/Library/")
+        .join(if self.is_agent == true { "LaunchAgents/" } else { "LaunchDaemons/"})
+        .join(format!("{}.plist", &self.service_name));
+
         launchctl_unload_daemon(&plist_path)?;
         fs::remove_file(&plist_path)
             .map_err(|e| Error::new(&format!("Failed to delete {}: {}", plist_path.display(), e)))
