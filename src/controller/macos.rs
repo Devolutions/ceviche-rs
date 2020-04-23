@@ -1,7 +1,7 @@
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc;
 
@@ -133,23 +133,28 @@ impl MacosController {
             .map_err(|e| Error::new(&format!("Failed to write {}: {}", path.display(), e)))
 
     }
+
+    fn plist_path(&mut self) -> PathBuf {
+        Path::new("/Library/")
+        .join(if self.is_agent { "LaunchAgents/" } else { "LaunchDaemons/"})
+        .join(format!("{}.plist", &self.service_name))
+    }
 }
 
 impl ControllerInterface for MacosController {
     /// Creates the service on the system.
     fn create(&mut self) -> Result<(), Error> {
-        let plist_path = Path::new("/Library/")
-        .join(if self.is_agent { "LaunchAgents/" } else { "LaunchDaemons/"})
-        .join(format!("{}.plist", &self.service_name));
+        let plist_path = self.plist_path();
             
         self.write_plist(&plist_path)?;
-        launchctl_load_daemon(&plist_path)
+        if !self.is_agent {
+            return launchctl_load_daemon(&plist_path)
+        }
+        Ok(())
     }
     /// Deletes the service.
     fn delete(&mut self) -> Result<(), Error> {
-        let plist_path = Path::new("/Library/")
-        .join(if self.is_agent { "LaunchAgents/" } else { "LaunchDaemons/"})
-        .join(format!("{}.plist", &self.service_name));
+        let plist_path = self.plist_path();
 
         launchctl_unload_daemon(&plist_path)?;
         fs::remove_file(&plist_path)
@@ -157,6 +162,9 @@ impl ControllerInterface for MacosController {
     }
     /// Starts the service.
     fn start(&mut self) -> Result<(), Error> {
+        if self.is_agent {
+            launchctl_load_daemon(&self.plist_path())?;
+        }
         launchctl_start_daemon(&self.service_name)
     }
     /// Stops the service.
