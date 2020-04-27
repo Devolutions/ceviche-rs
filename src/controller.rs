@@ -49,4 +49,12 @@ pub trait ControllerInterface {
     fn start(&mut self) -> Result<(), Error>;
     /// Stops the service.
     fn stop(&mut self) -> Result<(), Error>;
+    cfg_if!{
+        if #[cfg(target_os = "macos")] {
+            /// Loads the agent service.
+            fn load(&mut self) -> Result<(), Error>;
+            /// Unloads the agent service.
+            fn unload(&mut self) -> Result<(), Error>;
+        }
+    }
 }

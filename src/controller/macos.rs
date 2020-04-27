@@ -155,21 +155,27 @@ impl ControllerInterface for MacosController {
     /// Deletes the service.
     fn delete(&mut self) -> Result<(), Error> {
         let plist_path = self.plist_path();
-
-        launchctl_unload_daemon(&plist_path)?;
+        if !self.is_agent {
+            launchctl_unload_daemon(&plist_path)?;
+        }
         fs::remove_file(&plist_path)
             .map_err(|e| Error::new(&format!("Failed to delete {}: {}", plist_path.display(), e)))
     }
     /// Starts the service.
     fn start(&mut self) -> Result<(), Error> {
-        if self.is_agent {
-            launchctl_load_daemon(&self.plist_path())?;
-        }
         launchctl_start_daemon(&self.service_name)
     }
     /// Stops the service.
     fn stop(&mut self) -> Result<(), Error> {
         launchctl_stop_daemon(&self.service_name)
+    }
+    // Loads the agent service.
+    fn load(&mut self) -> Result<(), Error> {
+        launchctl_load_daemon(&self.plist_path())
+    }
+    // Loads the agent service.
+    fn unload(&mut self) -> Result<(), Error> {
+        launchctl_unload_daemon(&self.plist_path())
     }
 }
 
