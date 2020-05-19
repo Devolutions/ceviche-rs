@@ -1,7 +1,7 @@
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc;
 
@@ -97,6 +97,8 @@ pub struct MacosController {
     pub service_name: String,
     pub display_name: String,
     pub description: String,
+    pub plist: Option<String>,
+    pub is_agent: bool,
 }
 
 impl MacosController {
@@ -105,6 +107,8 @@ impl MacosController {
             service_name: service_name.to_string(),
             display_name: display_name.to_string(),
             description: description.to_string(),
+            plist: None,
+            is_agent: false
         }
     }
 
@@ -119,26 +123,41 @@ impl MacosController {
 
     fn write_plist(&self, path: &Path) -> Result<(), Error> {
         info!("Writing plist file {}", path.display());
-        let plist_content = gen_service_plist(&self.service_name);
+        let plist_content =
+        match &self.plist {
+            Some(ref plist) => plist.to_string(),
+            None => gen_service_plist(&self.service_name),
+        };
         File::create(path)
             .and_then(|mut file| file.write_all(plist_content.as_bytes()))
             .map_err(|e| Error::new(&format!("Failed to write {}: {}", path.display(), e)))
+
+    }
+
+    fn plist_path(&mut self) -> PathBuf {
+        Path::new("/Library/")
+        .join(if self.is_agent { "LaunchAgents/" } else { "LaunchDaemons/"})
+        .join(format!("{}.plist", &self.service_name))
     }
 }
 
 impl ControllerInterface for MacosController {
     /// Creates the service on the system.
     fn create(&mut self) -> Result<(), Error> {
-        let plist_path =
-            Path::new("/Library/LaunchDaemons/").join(format!("{}.plist", &self.service_name));
+        let plist_path = self.plist_path();
+            
         self.write_plist(&plist_path)?;
-        launchctl_load_daemon(&plist_path)
+        if !self.is_agent {
+            return launchctl_load_daemon(&plist_path)
+        }
+        Ok(())
     }
     /// Deletes the service.
     fn delete(&mut self) -> Result<(), Error> {
-        let plist_path =
-            Path::new("/Library/LaunchDaemons/").join(format!("{}.plist", &self.service_name));
-        launchctl_unload_daemon(&plist_path)?;
+        let plist_path = self.plist_path();
+        if !self.is_agent {
+            launchctl_unload_daemon(&plist_path)?;
+        }
         fs::remove_file(&plist_path)
             .map_err(|e| Error::new(&format!("Failed to delete {}: {}", plist_path.display(), e)))
     }
@@ -149,6 +168,14 @@ impl ControllerInterface for MacosController {
     /// Stops the service.
     fn stop(&mut self) -> Result<(), Error> {
         launchctl_stop_daemon(&self.service_name)
+    }
+    // Loads the agent service.
+    fn load(&mut self) -> Result<(), Error> {
+        launchctl_load_daemon(&self.plist_path())
+    }
+    // Loads the agent service.
+    fn unload(&mut self) -> Result<(), Error> {
+        launchctl_unload_daemon(&self.plist_path())
     }
 }
 
