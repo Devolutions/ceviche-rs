@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -16,20 +17,22 @@ use crate::ServiceEvent;
 type MacosServiceMainWrapperFn = extern "system" fn(args: Vec<String>);
 pub type Session = session::Session_<u32>;
 
-fn gen_service_plist(name: &str) -> String {
-    format!(r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>{0}</string>
-    <key>ProgramArguments</key>
-    <array>
-	    <string>/usr/local/bin/{0}</string>
-    </array>
-</dict>
-</plist>
-"#, name)
+pub enum LaunchAgentTargetSesssion {
+    GUI,
+    NonGUI,
+    PerUser,
+    PreLogin,
+}
+
+impl fmt::Display for LaunchAgentTargetSesssion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LaunchAgentTargetSesssion::GUI => write!(f, "Aqua"),
+            LaunchAgentTargetSesssion::NonGUI => write!(f, "StandardIO"),
+            LaunchAgentTargetSesssion::PerUser => write!(f, "Background"),
+            LaunchAgentTargetSesssion::PreLogin => write!(f, "LoginWindow"),
+        }
+    }
 }
 
 fn launchctl_load_daemon(plist_path: &Path) -> Result<(), Error> {
@@ -97,8 +100,8 @@ pub struct MacosController {
     pub service_name: String,
     pub display_name: String,
     pub description: String,
-    pub plist: Option<String>,
     pub is_agent: bool,
+    pub session_types: Option<Vec<LaunchAgentTargetSesssion>>,
 }
 
 impl MacosController {
@@ -107,8 +110,8 @@ impl MacosController {
             service_name: service_name.to_string(),
             display_name: display_name.to_string(),
             description: description.to_string(),
-            plist: None,
-            is_agent: false
+            is_agent: false,
+            session_types: None,
         }
     }
 
@@ -121,15 +124,61 @@ impl MacosController {
         Ok(())
     }
 
+    fn get_plist_content(&self) -> Result<String, Error> {
+        let mut plist = String::new();
+        plist.push_str(r#"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>"#);
+
+        plist.push_str(&format!(r#"
+<key>Disabled</key>
+<false/>
+<key>KeepAlive</key>
+<true/>
+<key>Label</key>
+<string>{}</string>
+<key>ProgramArguments</key>
+<array>
+<string>{}</string>
+</array>
+<key>RunAtLoad</key>
+<true/>"#,
+        self.service_name,
+        env::current_exe()
+            .map_err(|e| Error::new(&format!("env::current_exe() failed: {}", e)))?
+            .to_str().expect("env::current_exe() path to be unicode")
+        ));
+
+        if self.is_agent {
+            if let Some(session_types) = self.session_types.as_ref() {
+                plist.push_str(r#"
+<key>LimitLoadToSessionType</key>
+<array>"#);
+
+                for session_type in session_types {
+                    plist.push_str(&format!(r#"
+<string>{}</string>"#, session_type));
+                }
+
+                plist.push_str(r#"
+</array>"#);
+            }
+        }
+
+        plist.push_str(r#"
+</dict>
+</plist>"#);
+
+        Ok(plist)
+    }
+
     fn write_plist(&self, path: &Path) -> Result<(), Error> {
         info!("Writing plist file {}", path.display());
-        let plist_content =
-        match &self.plist {
-            Some(ref plist) => plist.to_string(),
-            None => gen_service_plist(&self.service_name),
-        };
+        let content = self.get_plist_content()?;
         File::create(path)
-            .and_then(|mut file| file.write_all(plist_content.as_bytes()))
+            .and_then(|mut file| file.write_all(content.as_bytes()))
             .map_err(|e| Error::new(&format!("Failed to write {}: {}", path.display(), e)))
 
     }

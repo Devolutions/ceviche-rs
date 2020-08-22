@@ -15,6 +15,7 @@ cfg_if!{
         pub use self::macos::MacosController as Controller;
         pub use self::macos::Session as Session;
         pub use self::macos::dispatch;
+        pub use self::macos::LaunchAgentTargetSesssion;
     } else if #[cfg(target_os = "linux")] {
         mod linux;
         pub use self::linux::LinuxController as Controller;
