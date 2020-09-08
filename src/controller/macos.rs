@@ -102,6 +102,7 @@ pub struct MacosController {
     pub description: String,
     pub is_agent: bool,
     pub session_types: Option<Vec<LaunchAgentTargetSesssion>>,
+    pub keep_alive: bool,
 }
 
 impl MacosController {
@@ -112,6 +113,7 @@ impl MacosController {
             description: description.to_string(),
             is_agent: false,
             session_types: None,
+            keep_alive: true,
         }
     }
 
@@ -125,6 +127,15 @@ impl MacosController {
     }
 
     fn get_plist_content(&self) -> Result<String, Error> {
+        let mut current_exe = env::current_exe()
+            .map_err(|e| Error::new(&format!("env::current_exe() failed: {}", e)))?;
+        let current_exe_str = current_exe
+            .to_str().expect("current_exe path to be unicode").to_string();
+
+        current_exe.pop();
+        let working_dir_str = current_exe
+            .to_str().expect("working_dir path to be unicode");
+
         let mut plist = String::new();
         plist.push_str(r#"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -135,20 +146,19 @@ impl MacosController {
         plist.push_str(&format!(r#"
 <key>Disabled</key>
 <false/>
-<key>KeepAlive</key>
-<true/>
 <key>Label</key>
 <string>{}</string>
 <key>ProgramArguments</key>
 <array>
 <string>{}</string>
 </array>
+<key>WorkingDirectory</key>
+<string>{}</string>
 <key>RunAtLoad</key>
 <true/>"#,
-        self.service_name,
-        env::current_exe()
-            .map_err(|e| Error::new(&format!("env::current_exe() failed: {}", e)))?
-            .to_str().expect("env::current_exe() path to be unicode")
+            self.service_name,
+            current_exe_str,
+            working_dir_str,
         ));
 
         if self.is_agent {
@@ -165,6 +175,12 @@ impl MacosController {
                 plist.push_str(r#"
 </array>"#);
             }
+        }
+
+        if self.keep_alive {
+            plist.push_str(r#"
+<key>KeepAlive</key>
+<true/>"#);
         }
 
         plist.push_str(r#"
