@@ -159,7 +159,7 @@ impl ControllerInterface for WindowsController {
             let service = service_manager.open_service(&self.service_name, SERVICE_ALL_ACCESS)?;
 
             if ControlService(
-                service_manager.handle,
+                service.handle,
                 SERVICE_CONTROL_STOP,
                 &mut self.service_status,
             ) != 0
@@ -172,7 +172,7 @@ impl ControllerInterface for WindowsController {
                 }
             }
 
-            if DeleteService(service.handle) != 0 {
+            if DeleteService(service.handle) == 0 {
                 return Err(Error::new(&format!(
                     "DeleteService: {}",
                     get_last_error_text()
@@ -211,7 +211,7 @@ impl ControllerInterface for WindowsController {
             let service = service_manager.open_service(&self.service_name, SERVICE_ALL_ACCESS)?;
 
             if ControlService(
-                service_manager.handle,
+                service.handle,
                 SERVICE_CONTROL_STOP,
                 &mut self.service_status,
             ) != 0
