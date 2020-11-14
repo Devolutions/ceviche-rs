@@ -1,13 +1,41 @@
-use std::env;
-use std::fmt;
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::mpsc;
+use std::{
+    env,
+    ffi::c_void,
+    fmt,
+    fs::{self, File},
+    io::Write,
+    path::{Path, PathBuf},
+    process::Command,
+    ptr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
+    thread,
+};
 
+use chrono;
 use ctrlc;
 use log::info;
+use timer;
+
+use core_foundation::{
+    array::{kCFTypeArrayCallBacks, CFArray, CFArrayCreate, CFArrayRef},
+    base::{CFAllocatorRef, CFRelease, CFType, CFTypeRef, TCFType, ToVoid},
+    runloop::{
+        kCFRunLoopDefaultMode, CFRunLoopAddSource, CFRunLoopGetCurrent, CFRunLoopRef, CFRunLoopRun,
+        CFRunLoopStop,
+    },
+    string::{CFString, CFStringRef},
+};
+
+use system_configuration_sys::{
+    dynamic_store::{
+        SCDynamicStoreContext, SCDynamicStoreCreate, SCDynamicStoreCreateRunLoopSource,
+        SCDynamicStoreRef, SCDynamicStoreSetNotificationKeys,
+    },
+    dynamic_store_copy_specific::{uid_t, SCDynamicStoreCopyConsoleUser},
+};
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
 use crate::session;
@@ -130,11 +158,14 @@ impl MacosController {
         let mut current_exe = env::current_exe()
             .map_err(|e| Error::new(&format!("env::current_exe() failed: {}", e)))?;
         let current_exe_str = current_exe
-            .to_str().expect("current_exe path to be unicode").to_string();
+            .to_str()
+            .expect("current_exe path to be unicode")
+            .to_string();
 
         current_exe.pop();
         let working_dir_str = current_exe
-            .to_str().expect("working_dir path to be unicode");
+            .to_str()
+            .expect("working_dir path to be unicode");
 
         let mut plist = String::new();
         plist.push_str(r#"
@@ -143,7 +174,8 @@ impl MacosController {
 <plist version="1.0">
 <dict>"#);
 
-        plist.push_str(&format!(r#"
+        plist.push_str(&format!(
+            r#"
 <key>Disabled</key>
 <false/>
 <key>Label</key>
@@ -156,36 +188,45 @@ impl MacosController {
 <string>{}</string>
 <key>RunAtLoad</key>
 <true/>"#,
-            self.service_name,
-            current_exe_str,
-            working_dir_str,
+            self.service_name, current_exe_str, working_dir_str,
         ));
 
         if self.is_agent {
             if let Some(session_types) = self.session_types.as_ref() {
-                plist.push_str(r#"
+                plist.push_str(
+                    r#"
 <key>LimitLoadToSessionType</key>
-<array>"#);
+<array>"#,
+                );
 
                 for session_type in session_types {
-                    plist.push_str(&format!(r#"
-<string>{}</string>"#, session_type));
+                    plist.push_str(&format!(
+                        r#"
+<string>{}</string>"#,
+                        session_type
+                    ));
                 }
 
-                plist.push_str(r#"
-</array>"#);
+                plist.push_str(
+                    r#"
+</array>"#,
+                );
             }
         }
 
         if self.keep_alive {
-            plist.push_str(r#"
+            plist.push_str(
+                r#"
 <key>KeepAlive</key>
-<true/>"#);
+<true/>"#,
+            );
         }
 
-        plist.push_str(r#"
+        plist.push_str(
+            r#"
 </dict>
-</plist>"#);
+</plist>"#,
+        );
 
         Ok(plist)
     }
@@ -196,13 +237,16 @@ impl MacosController {
         File::create(path)
             .and_then(|mut file| file.write_all(content.as_bytes()))
             .map_err(|e| Error::new(&format!("Failed to write {}: {}", path.display(), e)))
-
     }
 
     fn plist_path(&mut self) -> PathBuf {
         Path::new("/Library/")
-        .join(if self.is_agent { "LaunchAgents/" } else { "LaunchDaemons/"})
-        .join(format!("{}.plist", &self.service_name))
+            .join(if self.is_agent {
+                "LaunchAgents/"
+            } else {
+                "LaunchDaemons/"
+            })
+            .join(format!("{}.plist", &self.service_name))
     }
 }
 
@@ -210,10 +254,10 @@ impl ControllerInterface for MacosController {
     /// Creates the service on the system.
     fn create(&mut self) -> Result<(), Error> {
         let plist_path = self.plist_path();
-            
+
         self.write_plist(&plist_path)?;
         if !self.is_agent {
-            return launchctl_load_daemon(&plist_path)
+            return launchctl_load_daemon(&plist_path);
         }
         Ok(())
     }
@@ -254,13 +298,204 @@ macro_rules! Service {
     };
 }
 
+fn active_session_uid(store_ref: Option<SCDynamicStoreRef>) -> u32 {
+    let mut uid: uid_t = 0;
+    let store = store_ref.unwrap_or(ptr::null());
+
+    let user = unsafe { SCDynamicStoreCopyConsoleUser(store, &mut uid, ptr::null_mut()) };
+    if user.is_null() {
+        return 0;
+    }
+    let _cf_user: CFString = unsafe { TCFType::wrap_under_create_rule(user) };
+    return uid;
+}
+
+unsafe extern "C" fn on_sc_console_user_change<F>(
+    store: SCDynamicStoreRef,
+    _keys: CFArrayRef,
+    info: *mut c_void,
+) where
+    F: FnMut(u32, EventType) + Send + 'static,
+{
+    let uid = active_session_uid(Some(store));
+    let ctx_box = Box::from_raw(info as *mut Arc<SyncSessionContext<F>>);
+    let ctx_ptr = Box::leak(ctx_box);
+    let mut ctx = ctx_ptr.lock().unwrap();
+
+    let old_uid = ctx.uid;
+    if uid != ctx.uid {
+        ctx.uid = uid;
+        if old_uid != 0 || ctx.last_was_logout.load(Ordering::SeqCst) {
+            ctx.last_was_logout.store(false, Ordering::SeqCst);
+            (ctx.callback)(old_uid, EventType::Disconnect);
+        }
+
+        if uid != 0 {
+            ctx.pending_connect.store(false, Ordering::SeqCst);
+            (ctx.callback)(uid, EventType::Connect);
+        } else {
+            ctx.pending_connect.store(true, Ordering::SeqCst);
+            let ctx_weak = Arc::downgrade(ctx_ptr);
+            thread::spawn(move || {
+                let timer = timer::Timer::new();
+                let (tx, rx) = mpsc::channel();
+
+                let _guard = timer.schedule_with_delay(chrono::Duration::seconds(3), move || {
+                    let _ignored = tx.send(());
+                });
+                rx.recv().unwrap();
+                match ctx_weak.upgrade() {
+                    Some(ctx_ptr) => {
+                        let mut ctx = ctx_ptr.lock().unwrap();
+                        if ctx.pending_connect.load(Ordering::SeqCst) {
+                            ctx.last_was_logout.store(true, Ordering::SeqCst);
+                            (ctx.callback)(uid, EventType::Connect);
+                        }
+                    }
+                    None => return,
+                };
+            });
+        }
+    }
+}
+
+#[link(name = "SystemConfiguration", kind = "framework")]
+extern "C" {
+    pub fn SCDynamicStoreKeyCreateConsoleUser(allocator: CFAllocatorRef) -> CFStringRef;
+}
+
+pub enum EventType {
+    Connect,
+    Disconnect,
+}
+
+pub struct SessionContext<F: FnMut(u32, EventType)> {
+    uid: u32,
+    callback: F,
+    pending_connect: AtomicBool,
+    last_was_logout: AtomicBool,
+}
+
+impl<F: FnMut(u32, EventType)> SessionContext<F> {
+    pub fn new(cb: F) -> Self
+    where
+        F: FnMut(u32, EventType) + Send + 'static,
+    {
+        Self {
+            uid: active_session_uid(None),
+            callback: cb,
+            pending_connect: AtomicBool::new(false),
+            last_was_logout: AtomicBool::new(false),
+        }
+    }
+}
+
+pub type SyncSessionContext<T> = Mutex<SessionContext<T>>;
+
+pub struct Monitor<F: FnMut(u32, EventType)> {
+    context: *mut Arc<SyncSessionContext<F>>,
+}
+
+impl<F: FnMut(u32, EventType)> Drop for Monitor<F> {
+    fn drop(&mut self) {
+        let _ = unsafe { Box::from_raw(self.context as *mut Arc<SyncSessionContext<F>>) };
+    }
+}
+
+impl<F: FnMut(u32, EventType)> Monitor<F> {
+    pub fn new(cb: F) -> Result<Self, std::io::Error>
+    where
+        F: FnMut(u32, EventType) + Send + 'static,
+    {
+        let session_ctx = Box::new(Arc::new(Mutex::new(SessionContext::new(cb))));
+        let session_ctx_ptr = Box::into_raw(session_ctx);
+
+        let mut ctx = SCDynamicStoreContext {
+            version: 0,
+            info: session_ctx_ptr as *mut c_void,
+            retain: None,
+            release: None,
+            copyDescription: None,
+        };
+
+        unsafe {
+            let name = CFString::from_static_string("kCGSSessionUserNameKey");
+            let store_ref = SCDynamicStoreCreate(
+                ptr::null_mut(),
+                name.to_void() as CFStringRef,
+                Some(on_sc_console_user_change::<F>),
+                &mut ctx,
+            );
+            let key = SCDynamicStoreKeyCreateConsoleUser(ptr::null());
+            let keys = CFArrayCreate(ptr::null(), &key.to_void(), 1, &kCFTypeArrayCallBacks);
+            let _ = SCDynamicStoreSetNotificationKeys(store_ref, keys, ptr::null_mut());
+            // releases array
+            let _: CFArray<CFType> = TCFType::wrap_under_create_rule(keys);
+
+            let rls = SCDynamicStoreCreateRunLoopSource(ptr::null_mut(), store_ref, 0);
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), rls, kCFRunLoopDefaultMode);
+
+            CFRelease(rls as CFTypeRef);
+            CFRelease(store_ref as CFTypeRef);
+
+            Ok(Monitor {
+                context: session_ctx_ptr,
+            })
+        }
+    }
+}
+
+pub struct MonitorLoopRef {
+    loop_ref: CFRunLoopRef,
+}
+unsafe impl Send for MonitorLoopRef {}
+
+impl MonitorLoopRef {
+    pub fn stop(&mut self) {
+        unsafe { CFRunLoopStop(self.loop_ref) };
+    }
+}
+
+pub fn run_monitor<T: Send + 'static>(
+    tx: mpsc::Sender<ServiceEvent<T>>,
+) -> Result<MonitorLoopRef, std::io::Error> {
+    let (_tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let mon = Monitor::new(move |uid: u32, event: EventType| {
+            match event {
+                EventType::Connect => {
+                    let _ = tx.send(ServiceEvent::SessionConnect(Session::new(uid)));
+                }
+                EventType::Disconnect => {
+                    let _ = tx.send(ServiceEvent::SessionDisconnect(Session::new(uid)));
+                }
+            };
+        });
+
+        let loop_ref = unsafe { CFRunLoopGetCurrent() };
+        let mon_loop_ref = MonitorLoopRef { loop_ref: loop_ref };
+        _tx.send(mon_loop_ref).unwrap();
+        unsafe { CFRunLoopRun() };
+        drop(mon);
+    });
+
+    let received = rx.recv().unwrap();
+
+    return Ok(received);
+}
+
 #[doc(hidden)]
 pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
     let (tx, rx) = mpsc::channel();
+
+    let mut session_monitor = run_monitor(tx.clone()).expect("Failed to run session monitor");
     let _tx = tx.clone();
 
     ctrlc::set_handler(move || {
         let _ = tx.send(ServiceEvent::Stop);
-    }).expect("Failed to register Ctrl-C handler");
+    })
+    .expect("Failed to register Ctrl-C handler");
     service_main(rx, _tx, args, false);
+
+    session_monitor.stop();
 }
