@@ -338,11 +338,17 @@ unsafe extern "system" fn service_handler<T>(
             let session_id = (*session_notification).dwSessionId;
             let session = Session::new(session_id);
 
-            if event == WTS_CONSOLE_CONNECT || event == WTS_REMOTE_CONNECT {
+            if event == WTS_CONSOLE_CONNECT {
                 let _ = (*tx).send(ServiceEvent::SessionConnect(session));
                 return 0;
-            } else if event == WTS_CONSOLE_DISCONNECT || event == WTS_REMOTE_DISCONNECT {
+            } else if event == WTS_CONSOLE_DISCONNECT {
                 let _ = (*tx).send(ServiceEvent::SessionDisconnect(session));
+                return 0;
+            } else if event == WTS_REMOTE_CONNECT {
+                let _ = (*tx).send(ServiceEvent::SessionRemoteConnect(session));
+                return 0;
+            } else if event == WTS_REMOTE_DISCONNECT {
+                let _ = (*tx).send(ServiceEvent::SessionRemoteDisconnect(session));
                 return 0;
             } else if event == WTS_SESSION_LOGON {
                 let _ = (*tx).send(ServiceEvent::SessionLogon(session));
