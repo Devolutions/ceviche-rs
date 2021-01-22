@@ -385,7 +385,7 @@ impl<F: FnMut(u32, EventType)> SessionContext<F> {
             uid: active_session_uid(None),
             callback: cb,
             pending_connect: AtomicBool::new(false),
-            last_was_logout: AtomicBool::new(false),
+            last_was_logout: AtomicBool::new(true),
         }
     }
 }
