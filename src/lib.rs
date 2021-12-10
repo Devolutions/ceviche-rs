@@ -71,13 +71,15 @@
 #[macro_use]
 extern crate cfg_if;
 
-use std::fmt;
-
 /// Manages the service on the system.
 pub mod controller;
 pub mod session;
 
-use controller::Session;
+#[cfg(windows)]
+pub use winapi;
+
+use self::controller::Session;
+use std::fmt;
 
 /// Service errors
 #[derive(Debug)]
@@ -87,7 +89,9 @@ pub struct Error {
 
 impl From<&str> for Error {
     fn from(message: &str) -> Self {
-        Error { message: message.to_string() }
+        Error {
+            message: message.to_string(),
+        }
     }
 }
 
@@ -127,7 +131,7 @@ pub enum ServiceEvent<T> {
     Custom(T),
 }
 
-impl<T> fmt::Display for ServiceEvent<T>  {
+impl<T> fmt::Display for ServiceEvent<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             ServiceEvent::Continue => write!(f, "Continue"),
@@ -136,7 +140,9 @@ impl<T> fmt::Display for ServiceEvent<T>  {
             ServiceEvent::SessionConnect(id) => write!(f, "SessionConnect({})", id),
             ServiceEvent::SessionDisconnect(id) => write!(f, "SessionDisconnect({})", id),
             ServiceEvent::SessionRemoteConnect(id) => write!(f, "SessionRemoteConnect({})", id),
-            ServiceEvent::SessionRemoteDisconnect(id) => write!(f, "SessionRemoteDisconnect({})", id),
+            ServiceEvent::SessionRemoteDisconnect(id) => {
+                write!(f, "SessionRemoteDisconnect({})", id)
+            }
             ServiceEvent::SessionLogon(id) => write!(f, "SessionLogon({})", id),
             ServiceEvent::SessionLogoff(id) => write!(f, "SessionLogoff({})", id),
             ServiceEvent::SessionLock(id) => write!(f, "SessionLock({})", id),
