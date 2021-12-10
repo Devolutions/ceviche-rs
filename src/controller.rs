@@ -5,7 +5,6 @@ use crate::ServiceEvent;
 
 cfg_if!{
     if #[cfg(windows)] {
-        #[macro_use]
         mod windows;
         pub use self::windows::WindowsController as Controller;
         pub use self::windows::Session as Session;

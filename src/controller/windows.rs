@@ -6,7 +6,6 @@ use std::sync::mpsc;
 use std::{thread, time};
 
 use widestring::WideCString;
-use winapi::{self, STRUCT};
 use winapi::shared::minwindef::*;
 use winapi::shared::winerror::*;
 use winapi::um::errhandlingapi::*;
@@ -15,6 +14,7 @@ use winapi::um::winbase::*;
 use winapi::um::winnt::*;
 use winapi::um::winsvc::*;
 use winapi::um::winuser::*;
+use winapi::{self, STRUCT};
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
 use crate::session;
@@ -23,7 +23,7 @@ use crate::ServiceEvent;
 
 static mut SERVICE_CONTROL_HANDLE: SERVICE_STATUS_HANDLE = ptr::null_mut();
 
-STRUCT!{#[allow(non_snake_case)]
+STRUCT! {#[allow(non_snake_case)]
     struct SERVICE_DESCRIPTION_W {
     lpDescription: LPWSTR,
 }}
@@ -418,8 +418,8 @@ pub fn get_last_error_text() -> String {
 #[macro_export]
 macro_rules! Service {
     ($name:expr, $function:ident) => {
-        use winapi::shared::minwindef::DWORD;
-        use winapi::um::winnt::LPWSTR;
+        use $crate::winapi::shared::minwindef::DWORD;
+        use $crate::winapi::um::winnt::LPWSTR;
 
         extern "system" fn service_main_wrapper(argc: DWORD, argv: *mut LPWSTR) {
             dispatch($function, $name, argc, argv);
@@ -428,12 +428,7 @@ macro_rules! Service {
 }
 
 #[doc(hidden)]
-pub fn dispatch<T>(
-    service_main: ServiceMainFn<T>, 
-    name: &str, 
-    argc: DWORD, 
-    argv: *mut LPWSTR) 
-{
+pub fn dispatch<T>(service_main: ServiceMainFn<T>, name: &str, argc: DWORD, argv: *mut LPWSTR) {
     let args = get_args(argc, argv);
     let service_name = get_utf16(name);
     let (mut tx, rx) = mpsc::channel();
