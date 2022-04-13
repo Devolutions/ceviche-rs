@@ -22,17 +22,20 @@ fn systemctl_execute(args: &[&str]) -> Result<(), Error> {
     let mut process = Command::new("systemctl");
     process.args(args);
 
-    let output = process.output()
+    let output = process
+        .output()
         .map_err(|e| Error::new(&format!("Failed to execute command {}: {}", args[0], e)))?;
 
     if !output.status.success() {
-        return Err(Error::new(&format!("Command \"{}\" failed ({}): {}", 
-            args[0], 
+        return Err(Error::new(&format!(
+            "Command \"{}\" failed ({}): {}",
+            args[0],
             output.status.code().expect("Process terminated by signal"),
-            std::str::from_utf8(&output.stderr).unwrap_or_default())))
+            std::str::from_utf8(&output.stderr).unwrap_or_default()
+        )));
     }
 
-    if output.stdout.len() > 0 {
+    if !output.stdout.is_empty() {
         info!("{}", String::from_utf8_lossy(&output.stdout));
     }
 
@@ -42,13 +45,17 @@ fn systemctl_execute(args: &[&str]) -> Result<(), Error> {
 fn systemd_install_daemon(name: &str) -> Result<(), Error> {
     systemctl_execute(&["daemon-reload"])?;
     systemctl_execute(&["enable", name])
-} 
+}
 
 fn systemd_uninstall_daemon(name: &str) -> Result<(), Error> {
     systemctl_execute(&["disable", name])?;
-    systemctl_execute(&["daemon-reload"]).map_err(|e| debug!("{}", e)).ok();
-    systemctl_execute(&["reset-failed"]).map_err(|e| debug!("{}", e)).ok();
-    
+    systemctl_execute(&["daemon-reload"])
+        .map_err(|e| debug!("{}", e))
+        .ok();
+    systemctl_execute(&["reset-failed"])
+        .map_err(|e| debug!("{}", e))
+        .ok();
+
     Ok(())
 }
 
@@ -90,17 +97,16 @@ impl LinuxController {
     }
 
     fn get_service_unit_path(&self) -> PathBuf {
-        Path::new("/lib/systemd/system/")
-            .join(self.get_service_file_name())
+        Path::new("/lib/systemd/system/").join(self.get_service_file_name())
     }
 
     fn get_service_dropin_dir(&self) -> PathBuf {
-        Path::new("/lib/systemd/system/")
-            .join(format!("{}.d", self.get_service_file_name()))
+        Path::new("/lib/systemd/system/").join(format!("{}.d", self.get_service_file_name()))
     }
 
     fn get_service_unit_content(&self) -> Result<String, Error> {
-        Ok(format!(r#"
+        Ok(format!(
+            r#"
 [Unit]
 Description={}
 
@@ -108,11 +114,13 @@ Description={}
 ExecStart={}
 
 [Install]
-WantedBy=multi-user.target"#, 
-        self.service_name,
-        fs::read_link("/proc/self/exe")
-            .map_err(|e| Error::new(&format!("Failed to read /proc/self/exe: {}", e)))?
-            .to_str().ok_or("Failed to parse /proc/self/exe")?))
+WantedBy=multi-user.target"#,
+            self.service_name,
+            fs::read_link("/proc/self/exe")
+                .map_err(|e| Error::new(&format!("Failed to read /proc/self/exe: {}", e)))?
+                .to_str()
+                .ok_or("Failed to parse /proc/self/exe")?
+        ))
     }
 
     fn write_service_config(&self) -> Result<(), Error> {
@@ -124,7 +132,9 @@ WantedBy=multi-user.target"#,
             .map_err(|e| Error::new(&format!("Failed to write {}: {}", path.display(), e)))?;
 
         if let Some(ref config) = self.config {
-            let path = self.get_service_dropin_dir().join(format!("{}.conf", self.service_name));
+            let path = self
+                .get_service_dropin_dir()
+                .join(format!("{}.conf", self.service_name));
             fs::create_dir(path.parent().unwrap())
                 .map_err(|e| Error::new(&format!("Failed to create {}: {}", path.display(), e)))?;
             info!("Writing config file {}", path.display());
@@ -140,7 +150,7 @@ WantedBy=multi-user.target"#,
 impl ControllerInterface for LinuxController {
     fn create(&mut self) -> Result<(), Error> {
         self.write_service_config()?;
-        
+
         systemd_install_daemon(&self.service_name)
     }
 
@@ -149,11 +159,13 @@ impl ControllerInterface for LinuxController {
 
         let path = self.get_service_unit_path();
         fs::remove_file(&path)
-            .map_err(|e| debug!("Failed to delete {}: {}", path.display(), e)).ok();
+            .map_err(|e| debug!("Failed to delete {}: {}", path.display(), e))
+            .ok();
 
         let path = self.get_service_dropin_dir();
         fs::remove_dir_all(self.get_service_dropin_dir())
-            .map_err(|e| debug!("Failed to delete {}: {}", path.display(), e)).ok();
+            .map_err(|e| debug!("Failed to delete {}: {}", path.display(), e))
+            .ok();
 
         Ok(())
     }
@@ -167,7 +179,9 @@ impl ControllerInterface for LinuxController {
     }
 }
 
-fn run_monitor<T: Send + 'static>(tx: mpsc::Sender<ServiceEvent<T>>) -> Result<Monitor, std::io::Error> {
+fn run_monitor<T: Send + 'static>(
+    tx: mpsc::Sender<ServiceEvent<T>>,
+) -> Result<Monitor, std::io::Error> {
     let monitor = Monitor::new()?;
 
     let mut current_session = match login_session::get_active_session() {
@@ -175,7 +189,7 @@ fn run_monitor<T: Send + 'static>(tx: mpsc::Sender<ServiceEvent<T>>) -> Result<M
         Err(e) => {
             debug!("Failed to get active session {}", e);
             None
-        },
+        }
     };
 
     monitor.init(Category::Sessions, move || {
@@ -184,7 +198,7 @@ fn run_monitor<T: Send + 'static>(tx: mpsc::Sender<ServiceEvent<T>>) -> Result<M
             Err(e) => {
                 debug!("Failed to get active session {}", e);
                 None
-            },
+            }
         };
 
         let session_changed = match (&current_session, &active_session) {
@@ -195,11 +209,15 @@ fn run_monitor<T: Send + 'static>(tx: mpsc::Sender<ServiceEvent<T>>) -> Result<M
 
         if session_changed {
             if let Some(active_session) = active_session.as_ref() {
-                let _ = tx.send(ServiceEvent::SessionConnect(Session::new(active_session.identifier.to_string())));
+                let _ = tx.send(ServiceEvent::SessionConnect(Session::new(
+                    active_session.identifier.to_string(),
+                )));
             }
 
             if let Some(current_session) = current_session.as_ref() {
-                let _ = tx.send(ServiceEvent::SessionDisconnect(Session::new(current_session.identifier.to_string())));
+                let _ = tx.send(ServiceEvent::SessionDisconnect(Session::new(
+                    current_session.identifier.to_string(),
+                )));
             }
         }
 
@@ -221,12 +239,13 @@ macro_rules! Service {
 #[doc(hidden)]
 pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
     let (tx, rx) = mpsc::channel();
-    
+
     let _monitor = run_monitor(tx.clone()).expect("Failed to run session monitor");
     let _tx = tx.clone();
 
     ctrlc::set_handler(move || {
         let _ = tx.send(ServiceEvent::Stop);
-    }).expect("Failed to register Ctrl-C handler");
+    })
+    .expect("Failed to register Ctrl-C handler");
     service_main(rx, _tx, args, false);
 }

@@ -3,7 +3,7 @@ use std::sync::mpsc;
 use crate::Error;
 use crate::ServiceEvent;
 
-cfg_if!{
+cfg_if! {
     if #[cfg(windows)] {
         mod windows;
         pub use self::windows::WindowsController as Controller;
@@ -49,7 +49,7 @@ pub trait ControllerInterface {
     fn start(&mut self) -> Result<(), Error>;
     /// Stops the service.
     fn stop(&mut self) -> Result<(), Error>;
-    cfg_if!{
+    cfg_if! {
         if #[cfg(target_os = "macos")] {
             /// Loads the agent service.
             fn load(&mut self) -> Result<(), Error>;
