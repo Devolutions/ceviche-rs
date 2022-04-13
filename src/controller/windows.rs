@@ -141,8 +141,10 @@ impl ControllerInterface for WindowsController {
 
             self.tag_id = tag_id;
 
+            let mut description = get_utf16(&self.description.as_str());
+
             let mut sd = SERVICE_DESCRIPTION_W {
-                lpDescription: get_utf16(self.description.as_str()).as_mut_ptr(),
+                lpDescription: description.as_mut_ptr()
             };
 
             let p_sd = &mut sd as *mut _ as *mut winapi::ctypes::c_void;
