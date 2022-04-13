@@ -1,8 +1,8 @@
+use crate::controller::ControllerInterface;
+use crate::session;
 /// The dummy controller is a mock controller, the only operation that as an
 /// effect is calling it in standalone mode.
 use crate::Error;
-use crate::controller::ControllerInterface;
-use crate::session;
 
 pub type Session = session::Session_<u32>;
 

@@ -141,10 +141,10 @@ impl ControllerInterface for WindowsController {
 
             self.tag_id = tag_id;
 
-            let mut description = get_utf16(&self.description.as_str());
+            let mut description = get_utf16(self.description.as_str());
 
             let mut sd = SERVICE_DESCRIPTION_W {
-                lpDescription: description.as_mut_ptr()
+                lpDescription: description.as_mut_ptr(),
             };
 
             let p_sd = &mut sd as *mut _ as *mut winapi::ctypes::c_void;
@@ -324,15 +324,15 @@ unsafe extern "system" fn service_handler<T>(
         SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
             set_service_status(SERVICE_CONTROL_HANDLE, SERVICE_STOP_PENDING, 10);
             let _ = (*tx).send(ServiceEvent::Stop);
-            return 0;
+            0
         }
         SERVICE_CONTROL_PAUSE => {
             let _ = (*tx).send(ServiceEvent::Pause);
-            return 0;
+            0
         }
         SERVICE_CONTROL_CONTINUE => {
             let _ = (*tx).send(ServiceEvent::Continue);
-            return 0;
+            0
         }
         SERVICE_CONTROL_SESSIONCHANGE => {
             let event = event_type as usize;
@@ -342,34 +342,34 @@ unsafe extern "system" fn service_handler<T>(
 
             if event == WTS_CONSOLE_CONNECT {
                 let _ = (*tx).send(ServiceEvent::SessionConnect(session));
-                return 0;
+                0
             } else if event == WTS_CONSOLE_DISCONNECT {
                 let _ = (*tx).send(ServiceEvent::SessionDisconnect(session));
-                return 0;
+                0
             } else if event == WTS_REMOTE_CONNECT {
                 let _ = (*tx).send(ServiceEvent::SessionRemoteConnect(session));
-                return 0;
+                0
             } else if event == WTS_REMOTE_DISCONNECT {
                 let _ = (*tx).send(ServiceEvent::SessionRemoteDisconnect(session));
-                return 0;
+                0
             } else if event == WTS_SESSION_LOGON {
                 let _ = (*tx).send(ServiceEvent::SessionLogon(session));
-                return 0;
+                0
             } else if event == WTS_SESSION_LOGOFF {
                 let _ = (*tx).send(ServiceEvent::SessionLogoff(session));
-                return 0;
+                0
             } else if event == WTS_SESSION_LOCK {
                 let _ = (*tx).send(ServiceEvent::SessionLock(session));
-                return 0;
+                0
             } else if event == WTS_SESSION_UNLOCK {
                 let _ = (*tx).send(ServiceEvent::SessionUnlock(session));
-                return 0;
+                0
             } else {
-                return 0;
+                0
             }
         }
-        _ => return ERROR_CALL_NOT_IMPLEMENTED,
-    };
+        _ => ERROR_CALL_NOT_IMPLEMENTED,
+    }
 }
 
 fn get_args(argc: DWORD, argv: *mut LPWSTR) -> Vec<String> {
