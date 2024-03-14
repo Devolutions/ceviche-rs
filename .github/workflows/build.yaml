@@ -1,0 +1,36 @@
+name: CI
+
+on:
+    push:
+
+jobs:
+    build:
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ['pc-windows-msvc', 'apple-darwin', 'unknown-linux-gnu']
+                arch: [x86_64, aarch64]
+                include:
+                    - runner: ubuntu-latest
+                      os: unknown-linux-gnu
+                    - runner: windows-latest
+                      os: pc-windows-msvc
+                    - runner: macos-latest
+                      os: apple-darwin
+        runs-on: ${{ matrix.runner }}
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Configure runner
+              run: rustup target add ${{matrix.arch}}-${{matrix.os}}
+
+            - name: Configure runner
+              if: matrix.os == 'unknown-linux-gnu'
+              run: |
+                sudo apt-get update
+                sudo apt-get -o Acquire:retries=3 install libsystemd-dev
+
+            - name: Build
+              shell: pwsh
+              run: cargo build --target ${{matrix.arch}}-${{matrix.os}}

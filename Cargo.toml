@@ -1,10 +1,10 @@
 [package]
 name = "ceviche"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2021"
 license = "MIT/Apache-2.0"
-homepage = "https://github.com/wayk/ceviche-rs"
-repository = "https://github.com/wayk/ceviche-rs"
+homepage = "https://github.com/devolutions/ceviche-rs"
+repository = "https://github.com/devolutions/ceviche-rs"
 authors = ["Marc-André Moreau <marcandre.moreau@gmail.com>", "Sébastien Duquette <sduquette@devolutions.net>", "Richard Markiewicz <rmarkiewicz@devolutions.net>"]
 keywords = ["daemon", "service"]
 description = "Rust daemon/service wrapper"
@@ -23,7 +23,7 @@ winapi = { version = "0.3", features = ["winbase", "winerror", "winuser", "winsv
 widestring = "0.4.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-systemd-rs = "^0.1.2"
+systemd-rs = { version="^0.1.2", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.9"

@@ -7,13 +7,17 @@ use std::sync::mpsc;
 
 use ctrlc;
 use log::{debug, info};
-use systemd_rs::login::monitor::{Category, Monitor};
-use systemd_rs::login::session as login_session;
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
 use crate::session;
 use crate::Error;
 use crate::ServiceEvent;
+
+#[cfg(feature = "systemd-rs")]
+use {
+    systemd_rs::login::monitor::{Category, Monitor},
+    systemd_rs::login::session as login_session,
+};
 
 type LinuxServiceMainWrapperFn = extern "system" fn(args: Vec<String>);
 pub type Session = session::Session_<String>;
@@ -179,6 +183,7 @@ impl ControllerInterface for LinuxController {
     }
 }
 
+#[cfg(feature = "systemd-rs")]
 fn run_monitor<T: Send + 'static>(
     tx: mpsc::Sender<ServiceEvent<T>>,
 ) -> Result<Monitor, std::io::Error> {
@@ -240,7 +245,11 @@ macro_rules! Service {
 pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
     let (tx, rx) = mpsc::channel();
 
-    let _monitor = run_monitor(tx.clone()).expect("Failed to run session monitor");
+    #[cfg(feature = "systemd-rs")]
+    {
+        let _monitor = run_monitor(tx.clone()).expect("Failed to run session monitor");
+    }
+
     let _tx = tx.clone();
 
     ctrlc::set_handler(move || {
