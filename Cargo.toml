@@ -19,8 +19,9 @@ ctrlc = { version = "3.1", features = ["termination"] }
 log = "0.4"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winbase", "winerror", "winuser", "winsvc", "libloaderapi", "errhandlingapi"] }
 widestring = "0.4.3"
+windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_System_RemoteDesktop", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", 
+    "Win32_Security", "Win32_System_Services", "Win32_System_Diagnostics_Debug"]}
 
 [target.'cfg(target_os = "linux")'.dependencies]
 systemd-rs = { version="^0.1.2", optional = true }

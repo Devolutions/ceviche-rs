@@ -1,4 +1,4 @@
-use std::ffi::OsStr;
+use std::ffi::{c_void, OsStr};
 use std::iter::once;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr;
@@ -6,29 +6,33 @@ use std::sync::mpsc;
 use std::{thread, time};
 
 use widestring::WideCString;
-use winapi::shared::minwindef::*;
-use winapi::shared::winerror::*;
-use winapi::um::errhandlingapi::*;
-use winapi::um::libloaderapi::*;
-use winapi::um::winbase::*;
-use winapi::um::winnt::*;
-use winapi::um::winsvc::*;
-use winapi::um::winuser::*;
-use winapi::{self, STRUCT};
+use windows_sys::core::PWSTR;
+use windows_sys::Win32::{
+    Foundation::{MAX_PATH, ERROR_CALL_NOT_IMPLEMENTED, GetLastError},
+    Security::SC_HANDLE,
+    System::{
+        Diagnostics::Debug::{FormatMessageW, FORMAT_MESSAGE_FROM_SYSTEM},
+        LibraryLoader::GetModuleFileNameW,
+        RemoteDesktop::WTSSESSION_NOTIFICATION,
+        Services::*,
+    },
+    UI::WindowsAndMessaging::{
+        WTS_CONSOLE_CONNECT, WTS_CONSOLE_DISCONNECT, WTS_REMOTE_CONNECT, WTS_REMOTE_DISCONNECT, 
+        WTS_SESSION_LOGON, WTS_SESSION_LOGOFF, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK
+    }
+};
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
 use crate::session;
 use crate::Error;
 use crate::ServiceEvent;
 
-static mut SERVICE_CONTROL_HANDLE: SERVICE_STATUS_HANDLE = ptr::null_mut();
+type DWORD = u32;
+type LPVOID = *mut c_void;
 
-STRUCT! {#[allow(non_snake_case)]
-    struct SERVICE_DESCRIPTION_W {
-    lpDescription: LPWSTR,
-}}
+static mut SERVICE_CONTROL_HANDLE: SERVICE_STATUS_HANDLE = 0;
 
-type WindowsServiceMainWrapperFn = extern "system" fn(argc: DWORD, argv: *mut LPWSTR);
+type WindowsServiceMainWrapperFn = extern "system" fn(argc: DWORD, argv: *mut PWSTR);
 pub type Session = session::Session_<u32>;
 
 struct Service {
@@ -37,7 +41,7 @@ struct Service {
 
 impl Drop for Service {
     fn drop(&mut self) {
-        if !self.handle.is_null() {
+        if !(self.handle == 0) {
             unsafe { CloseServiceHandle(self.handle) };
         }
     }
@@ -51,7 +55,7 @@ impl ServiceControlManager {
     fn open(desired_access: DWORD) -> Result<ServiceControlManager, Error> {
         let handle = unsafe { OpenSCManagerW(ptr::null_mut(), ptr::null_mut(), desired_access) };
 
-        if handle.is_null() {
+        if handle == 0 {
             Err(Error::new(&format!(
                 "OpenSCManager: {}",
                 get_last_error_text()
@@ -70,7 +74,7 @@ impl ServiceControlManager {
             )
         };
 
-        if handle.is_null() {
+        if handle == 0 {
             Err(Error::new(&format!(
                 "OpenServiceW: {}",
                 get_last_error_text()
@@ -83,7 +87,7 @@ impl ServiceControlManager {
 
 impl Drop for ServiceControlManager {
     fn drop(&mut self) {
-        if !self.handle.is_null() {
+        if !(self.handle == 0) {
             unsafe { CloseServiceHandle(self.handle) };
         }
     }
@@ -132,7 +136,7 @@ impl ControllerInterface for WindowsController {
                 ptr::null_mut(),
             );
 
-            if service.is_null() {
+            if service == 0 {
                 return Err(Error::new(&format!(
                     "CreateService: {}",
                     get_last_error_text()
@@ -143,11 +147,11 @@ impl ControllerInterface for WindowsController {
 
             let mut description = get_utf16(self.description.as_str());
 
-            let mut sd = SERVICE_DESCRIPTION_W {
+            let mut sd = SERVICE_DESCRIPTIONW {
                 lpDescription: description.as_mut_ptr(),
             };
 
-            let p_sd = &mut sd as *mut _ as *mut winapi::ctypes::c_void;
+            let p_sd = &mut sd as *mut _ as *mut c_void;
             ChangeServiceConfig2W(service, SERVICE_CONFIG_DESCRIPTION, p_sd);
             CloseServiceHandle(service);
 
@@ -261,7 +265,7 @@ impl WindowsController {
                 dwCheckPoint: 0,
                 dwWaitHint: 0,
             },
-            status_handle: ptr::null_mut(),
+            status_handle: 0,
             controls_accepted: SERVICE_ACCEPT_STOP,
         }
     }
@@ -272,11 +276,11 @@ impl WindowsController {
         service_main_wrapper: WindowsServiceMainWrapperFn,
     ) -> Result<(), Error> {
         unsafe {
-            let service_name = get_utf16(self.service_name.as_str());
+            let mut service_name = get_utf16(self.service_name.as_str());
 
             let service_table: &[*const SERVICE_TABLE_ENTRYW] = &[
                 &SERVICE_TABLE_ENTRYW {
-                    lpServiceName: service_name.as_ptr(),
+                    lpServiceName: service_name.as_mut_ptr(),
                     lpServiceProc: Some(service_main_wrapper),
                 },
                 ptr::null(),
@@ -335,8 +339,8 @@ unsafe extern "system" fn service_handler<T>(
             0
         }
         SERVICE_CONTROL_SESSIONCHANGE => {
-            let event = event_type as usize;
-            let session_notification = event_data as PWTSSESSION_NOTIFICATION;
+            let event = event_type;
+            let session_notification = event_data as *const WTSSESSION_NOTIFICATION;
             let session_id = (*session_notification).dwSessionId;
             let session = Session::new(session_id);
 
@@ -372,7 +376,7 @@ unsafe extern "system" fn service_handler<T>(
     }
 }
 
-fn get_args(argc: DWORD, argv: *mut LPWSTR) -> Vec<String> {
+fn get_args(argc: DWORD, argv: *mut PWSTR) -> Vec<String> {
     let mut args = Vec::new();
     for i in 0..argc {
         unsafe {
@@ -390,9 +394,9 @@ pub fn get_utf16(value: &str) -> Vec<u16> {
 
 pub fn get_filename() -> String {
     unsafe {
-        let mut filename = [0u16; MAX_PATH];
+        let mut filename = [0u16; MAX_PATH as usize];
         let _size = GetModuleFileNameW(
-            ptr::null_mut(),
+            0,
             filename.as_mut_ptr(),
             filename.len() as DWORD,
         );
@@ -420,17 +424,18 @@ pub fn get_last_error_text() -> String {
 #[macro_export]
 macro_rules! Service {
     ($name:expr, $function:ident) => {
-        use $crate::winapi::shared::minwindef::DWORD;
-        use $crate::winapi::um::winnt::LPWSTR;
+        use std::ffi::c_void;
+        type DWORD = u32;
+        type PWSTR = *mut u16;
 
-        extern "system" fn service_main_wrapper(argc: DWORD, argv: *mut LPWSTR) {
+        extern "system" fn service_main_wrapper(argc: DWORD, argv: *mut PWSTR) {
             dispatch($function, $name, argc, argv);
         }
     };
 }
 
 #[doc(hidden)]
-pub fn dispatch<T>(service_main: ServiceMainFn<T>, name: &str, argc: DWORD, argv: *mut LPWSTR) {
+pub fn dispatch<T>(service_main: ServiceMainFn<T>, name: &str, argc: DWORD, argv: *mut PWSTR) {
     let args = get_args(argc, argv);
     let service_name = get_utf16(name);
     let (mut tx, rx) = mpsc::channel();

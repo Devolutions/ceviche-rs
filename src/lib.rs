@@ -76,7 +76,7 @@ pub mod controller;
 pub mod session;
 
 #[cfg(windows)]
-pub use winapi;
+pub use windows_sys;
 
 use self::controller::Session;
 use std::fmt;
