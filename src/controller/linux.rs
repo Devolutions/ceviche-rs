@@ -137,12 +137,12 @@ WantedBy=multi-user.target"#,
 
         if let Some(ref config) = self.config {
             let dropin_dir = self.get_service_dropin_dir();
-            let path = dropin_dir
-                .join(format!("{}.conf", self.service_name));
+            let path = dropin_dir.join(format!("{}.conf", self.service_name));
 
             if !Path::exists(&dropin_dir) {
-                fs::create_dir(dropin_dir)
-                    .map_err(|e| Error::new(&format!("Failed to create {}: {}", path.display(), e)))?;
+                fs::create_dir(dropin_dir).map_err(|e| {
+                    Error::new(&format!("Failed to create {}: {}", path.display(), e))
+                })?;
             }
             info!("Writing config file {}", path.display());
             File::create(&path)
