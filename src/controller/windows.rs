@@ -8,7 +8,7 @@ use std::{thread, time};
 use widestring::WideCString;
 use windows_sys::core::PWSTR;
 use windows_sys::Win32::{
-    Foundation::{MAX_PATH, ERROR_CALL_NOT_IMPLEMENTED, GetLastError},
+    Foundation::{GetLastError, ERROR_CALL_NOT_IMPLEMENTED, MAX_PATH},
     Security::SC_HANDLE,
     System::{
         Diagnostics::Debug::{FormatMessageW, FORMAT_MESSAGE_FROM_SYSTEM},
@@ -17,9 +17,9 @@ use windows_sys::Win32::{
         Services::*,
     },
     UI::WindowsAndMessaging::{
-        WTS_CONSOLE_CONNECT, WTS_CONSOLE_DISCONNECT, WTS_REMOTE_CONNECT, WTS_REMOTE_DISCONNECT, 
-        WTS_SESSION_LOGON, WTS_SESSION_LOGOFF, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK
-    }
+        WTS_CONSOLE_CONNECT, WTS_CONSOLE_DISCONNECT, WTS_REMOTE_CONNECT, WTS_REMOTE_DISCONNECT,
+        WTS_SESSION_LOCK, WTS_SESSION_LOGOFF, WTS_SESSION_LOGON, WTS_SESSION_UNLOCK,
+    },
 };
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
@@ -395,11 +395,7 @@ pub fn get_utf16(value: &str) -> Vec<u16> {
 pub fn get_filename() -> String {
     unsafe {
         let mut filename = [0u16; MAX_PATH as usize];
-        let _size = GetModuleFileNameW(
-            0,
-            filename.as_mut_ptr(),
-            filename.len() as DWORD,
-        );
+        let _size = GetModuleFileNameW(0, filename.as_mut_ptr(), filename.len() as DWORD);
         String::from_utf16(&filename).unwrap_or_else(|_| String::from(""))
     }
 }
