@@ -6,7 +6,7 @@ use std::process::Command;
 use std::sync::mpsc;
 
 use ctrlc;
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::controller::{ControllerInterface, ServiceMainFn};
 use crate::session;
@@ -53,12 +53,8 @@ fn systemd_install_daemon(name: &str) -> Result<(), Error> {
 
 fn systemd_uninstall_daemon(name: &str) -> Result<(), Error> {
     systemctl_execute(&["disable", name])?;
-    systemctl_execute(&["daemon-reload"])
-        .map_err(|e| debug!("{}", e))
-        .ok();
-    systemctl_execute(&["reset-failed"])
-        .map_err(|e| debug!("{}", e))
-        .ok();
+    systemctl_execute(&["daemon-reload"]).map_err(|e| debug!("{}", e)).ok();
+    systemctl_execute(&["reset-failed"]).map_err(|e| debug!("{}", e)).ok();
 
     Ok(())
 }
@@ -69,6 +65,80 @@ fn systemd_start_daemon(name: &str) -> Result<(), Error> {
 
 fn systemd_stop_daemon(name: &str) -> Result<(), Error> {
     systemctl_execute(&["stop", name])
+}
+
+/// Detect the systemd system unit directory at runtime.
+///
+/// # Rationale
+///
+/// This isn't the best approach for Linux — packagers should normally choose the
+/// destination and rely on distro tooling (e.g., Debian's dh_installsystemd or
+/// RPM's %{_unitdir} macros). Using pkg-config at build/packaging time is a
+/// pragmatic, good-enough approach in many situations to discover the vendor
+/// unit dir without hardcoding paths.
+///
+/// # Caveat
+///
+/// We can't automatically determine whether it should go into user/ or
+/// system/, and we default to system/. Use CEVICHE_SYSTEMD_UNITDIR if you need
+/// to override this behavior.
+///
+/// # Detection order
+///
+/// 1. CEVICHE_SYSTEMD_UNITDIR environment variable (takes precedence)
+/// 2. pkg-config --variable=systemdsystemunitdir systemd
+/// 3. Fallback probing: /usr/lib/systemd/system, then /lib/systemd/system
+fn detect_systemd_unit_dir() -> Result<PathBuf, Error> {
+    // 1. Check for environment variable override.
+    if let Ok(dir) = env::var("CEVICHE_SYSTEMD_UNITDIR") {
+        if !dir.is_empty() {
+            info!("Using systemd unit directory from CEVICHE_SYSTEMD_UNITDIR: {dir}");
+            return Ok(PathBuf::from(dir));
+        }
+    }
+
+    // 2. Try pkg-config.
+    match Command::new("pkg-config")
+        .args(["--variable=systemdsystemunitdir", "systemd"])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !dir.is_empty() {
+                info!("Detected systemd unit directory via pkg-config: {dir}");
+                return Ok(PathBuf::from(dir));
+            }
+        }
+        Ok(_) => {
+            debug!("pkg-config returned no systemd unit directory");
+        }
+        Err(e) => {
+            debug!("pkg-config not available or failed: {e}");
+        }
+    }
+
+    // 3. Fallback: probe common directories.
+    warn!(
+        "pkg-config unavailable or didn't return a systemd unit directory. \
+         Falling back to heuristic probing of common vendor directories. \
+         This may be distro-specific. Consider setting CEVICHE_SYSTEMD_UNITDIR \
+         environment variable to specify the correct path."
+    );
+
+    let candidates = ["/usr/lib/systemd/system", "/lib/systemd/system"];
+
+    for &candidate in &candidates {
+        let path = Path::new(candidate);
+        if path.exists() && path.is_dir() {
+            info!("Found systemd unit directory via fallback probing: {candidate}");
+            return Ok(PathBuf::from(candidate));
+        }
+    }
+
+    Err(Error::new(
+        "Unable to detect systemd unit directory. \
+         Please set CEVICHE_SYSTEMD_UNITDIR environment variable to specify the correct path.",
+    ))
 }
 
 pub struct LinuxController {
@@ -88,10 +158,7 @@ impl LinuxController {
         }
     }
 
-    pub fn register(
-        &mut self,
-        service_main_wrapper: LinuxServiceMainWrapperFn,
-    ) -> Result<(), Error> {
+    pub fn register(&mut self, service_main_wrapper: LinuxServiceMainWrapperFn) -> Result<(), Error> {
         service_main_wrapper(env::args().collect());
         Ok(())
     }
@@ -100,12 +167,14 @@ impl LinuxController {
         format!("{}.service", &self.service_name)
     }
 
-    fn get_service_unit_path(&self) -> PathBuf {
-        Path::new("/lib/systemd/system/").join(self.get_service_file_name())
+    fn get_service_unit_path(&self) -> Result<PathBuf, Error> {
+        let unit_dir = detect_systemd_unit_dir()?;
+        Ok(unit_dir.join(self.get_service_file_name()))
     }
 
-    fn get_service_dropin_dir(&self) -> PathBuf {
-        Path::new("/lib/systemd/system/").join(format!("{}.d", self.get_service_file_name()))
+    fn get_service_dropin_dir(&self) -> Result<PathBuf, Error> {
+        let unit_dir = detect_systemd_unit_dir()?;
+        Ok(unit_dir.join(format!("{}.d", self.get_service_file_name())))
     }
 
     fn get_service_unit_content(&self) -> Result<String, Error> {
@@ -128,7 +197,7 @@ WantedBy=multi-user.target"#,
     }
 
     fn write_service_config(&self) -> Result<(), Error> {
-        let path = self.get_service_unit_path();
+        let path = self.get_service_unit_path()?;
         let content = self.get_service_unit_content()?;
         info!("Writing service file {}", path.display());
         File::create(&path)
@@ -136,13 +205,12 @@ WantedBy=multi-user.target"#,
             .map_err(|e| Error::new(&format!("Failed to write {}: {}", path.display(), e)))?;
 
         if let Some(ref config) = self.config {
-            let dropin_dir = self.get_service_dropin_dir();
+            let dropin_dir = self.get_service_dropin_dir()?;
             let path = dropin_dir.join(format!("{}.conf", self.service_name));
 
             if !Path::exists(&dropin_dir) {
-                fs::create_dir(dropin_dir).map_err(|e| {
-                    Error::new(&format!("Failed to create {}: {}", path.display(), e))
-                })?;
+                fs::create_dir(&dropin_dir)
+                    .map_err(|e| Error::new(&format!("Failed to create {}: {}", path.display(), e)))?;
             }
             info!("Writing config file {}", path.display());
             File::create(&path)
@@ -164,15 +232,17 @@ impl ControllerInterface for LinuxController {
     fn delete(&mut self) -> Result<(), Error> {
         systemd_uninstall_daemon(&self.service_name)?;
 
-        let path = self.get_service_unit_path();
-        fs::remove_file(&path)
-            .map_err(|e| debug!("Failed to delete {}: {}", path.display(), e))
-            .ok();
+        if let Ok(path) = self.get_service_unit_path() {
+            fs::remove_file(&path)
+                .map_err(|e| debug!("Failed to delete {}: {}", path.display(), e))
+                .ok();
+        }
 
-        let path = self.get_service_dropin_dir();
-        fs::remove_dir_all(self.get_service_dropin_dir())
-            .map_err(|e| debug!("Failed to delete {}: {}", path.display(), e))
-            .ok();
+        if let Ok(dropin_dir) = self.get_service_dropin_dir() {
+            fs::remove_dir_all(&dropin_dir)
+                .map_err(|e| debug!("Failed to delete {}: {}", dropin_dir.display(), e))
+                .ok();
+        }
 
         Ok(())
     }
@@ -187,9 +257,7 @@ impl ControllerInterface for LinuxController {
 }
 
 #[cfg(feature = "systemd-rs")]
-fn run_monitor<T: Send + 'static>(
-    tx: mpsc::Sender<ServiceEvent<T>>,
-) -> Result<Monitor, std::io::Error> {
+fn run_monitor<T: Send + 'static>(tx: mpsc::Sender<ServiceEvent<T>>) -> Result<Monitor, std::io::Error> {
     let monitor = Monitor::new()?;
 
     let mut current_session = match login_session::get_active_session() {
