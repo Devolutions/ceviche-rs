@@ -19,7 +19,7 @@ use {
     systemd_rs::login::session as login_session,
 };
 
-type LinuxServiceMainWrapperFn = extern "system" fn(args: Vec<String>);
+type LinuxServiceMainWrapperFn = fn(args: Vec<String>) -> u8;
 pub type Session = session::Session_<String>;
 
 fn systemctl_execute(args: &[&str]) -> Result<(), Error> {
@@ -158,9 +158,8 @@ impl LinuxController {
         }
     }
 
-    pub fn register(&mut self, service_main_wrapper: LinuxServiceMainWrapperFn) -> Result<(), Error> {
-        service_main_wrapper(env::args().collect());
-        Ok(())
+    pub fn register(&mut self, service_main_wrapper: LinuxServiceMainWrapperFn) -> Result<std::process::ExitCode, Error> {
+        Ok(std::process::ExitCode::from(service_main_wrapper(env::args().collect())))
     }
 
     fn get_service_file_name(&self) -> String {
@@ -306,14 +305,17 @@ fn run_monitor<T: Send + 'static>(tx: mpsc::Sender<ServiceEvent<T>>) -> Result<M
 #[macro_export]
 macro_rules! Service {
     ($name:expr, $function:ident) => {
-        extern "system" fn service_main_wrapper(args: Vec<String>) {
-            dispatch($function, args);
+        fn service_main_wrapper(args: Vec<String>) -> u8 {
+            dispatch($function, args)
         }
     };
 }
 
 #[doc(hidden)]
-pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
+pub fn dispatch<T: Send + 'static>(
+    service_main: ServiceMainFn<T>,
+    args: Vec<String>,
+) -> u8 {
     let (tx, rx) = mpsc::channel();
 
     #[cfg(feature = "systemd-rs")]
@@ -327,5 +329,5 @@ pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<Str
         let _ = tx.send(ServiceEvent::Stop);
     })
     .expect("Failed to register Ctrl-C handler");
-    service_main(rx, _tx, args, false);
+    service_main(rx, _tx, args, false)
 }

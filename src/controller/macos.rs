@@ -42,7 +42,7 @@ use crate::session;
 use crate::Error;
 use crate::ServiceEvent;
 
-type MacosServiceMainWrapperFn = extern "system" fn(args: Vec<String>);
+type MacosServiceMainWrapperFn = fn(args: Vec<String>) -> u8;
 pub type Session = session::Session_<u32>;
 
 pub enum LaunchAgentTargetSesssion {
@@ -149,9 +149,8 @@ impl MacosController {
     pub fn register(
         &mut self,
         service_main_wrapper: MacosServiceMainWrapperFn,
-    ) -> Result<(), Error> {
-        service_main_wrapper(env::args().collect());
-        Ok(())
+    ) -> Result<std::process::ExitCode, Error> {
+        Ok(std::process::ExitCode::from(service_main_wrapper(env::args().collect())))
     }
 
     fn get_plist_content(&self) -> Result<String, Error> {
@@ -292,8 +291,8 @@ impl ControllerInterface for MacosController {
 #[macro_export]
 macro_rules! Service {
     ($name:expr, $function:ident) => {
-        extern "system" fn service_main_wrapper(args: Vec<String>) {
-            dispatch($function, args);
+        fn service_main_wrapper(args: Vec<String>) -> u8 {
+            dispatch($function, args)
         }
     };
 }
@@ -485,7 +484,7 @@ pub fn run_monitor<T: Send + 'static>(
 }
 
 #[doc(hidden)]
-pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) {
+pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<String>) -> u8 {
     let (tx, rx) = mpsc::channel();
 
     let mut session_monitor = run_monitor(tx.clone()).expect("Failed to run session monitor");
@@ -495,7 +494,9 @@ pub fn dispatch<T: Send + 'static>(service_main: ServiceMainFn<T>, args: Vec<Str
         let _ = tx.send(ServiceEvent::Stop);
     })
     .expect("Failed to register Ctrl-C handler");
-    service_main(rx, _tx, args, false);
+    let exit_code = service_main(rx, _tx, args, false);
 
     session_monitor.stop();
+
+    exit_code
 }
