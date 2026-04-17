@@ -8,7 +8,7 @@ use std::{thread, time};
 use widestring::WideCString;
 use windows_sys::core::PWSTR;
 use windows_sys::Win32::{
-    Foundation::{GetLastError, ERROR_CALL_NOT_IMPLEMENTED, MAX_PATH},
+    Foundation::{GetLastError, ERROR_CALL_NOT_IMPLEMENTED, ERROR_SERVICE_SPECIFIC_ERROR, MAX_PATH},
     Security::SC_HANDLE,
     System::{
         Diagnostics::Debug::{FormatMessageW, FORMAT_MESSAGE_FROM_SYSTEM},
@@ -274,7 +274,7 @@ impl WindowsController {
     pub fn register(
         &mut self,
         service_main_wrapper: WindowsServiceMainWrapperFn,
-    ) -> Result<(), Error> {
+    ) -> Result<std::process::ExitCode, Error> {
         unsafe {
             let mut service_name = get_utf16(self.service_name.as_str());
 
@@ -288,7 +288,7 @@ impl WindowsController {
 
             match StartServiceCtrlDispatcherW(*service_table.as_ptr()) {
                 0 => Err(Error::new("StartServiceCtrlDispatcher")),
-                _ => Ok(()),
+                _ => Ok(std::process::ExitCode::SUCCESS),
             }
         }
     }
@@ -298,7 +298,13 @@ fn set_service_status(
     status_handle: SERVICE_STATUS_HANDLE,
     current_state: DWORD,
     wait_hint: DWORD,
+    service_exit_code: DWORD,
 ) {
+    let (win32_exit_code, service_specific_exit_code) = if service_exit_code != 0 {
+        (ERROR_SERVICE_SPECIFIC_ERROR, service_exit_code)
+    } else {
+        (0, 0)
+    };
     let mut service_status = SERVICE_STATUS {
         dwServiceType: SERVICE_WIN32_OWN_PROCESS,
         dwCurrentState: current_state,
@@ -306,8 +312,8 @@ fn set_service_status(
             | SERVICE_ACCEPT_SHUTDOWN
             | SERVICE_ACCEPT_PAUSE_CONTINUE
             | SERVICE_ACCEPT_SESSIONCHANGE,
-        dwWin32ExitCode: 0,
-        dwServiceSpecificExitCode: 0,
+        dwWin32ExitCode: win32_exit_code,
+        dwServiceSpecificExitCode: service_specific_exit_code,
         dwCheckPoint: 0,
         dwWaitHint: wait_hint,
     };
@@ -326,7 +332,7 @@ unsafe extern "system" fn service_handler<T>(
 
     match control {
         SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
-            set_service_status(SERVICE_CONTROL_HANDLE, SERVICE_STOP_PENDING, 10);
+            set_service_status(SERVICE_CONTROL_HANDLE, SERVICE_STOP_PENDING, 10, 0);
             let _ = (*tx).send(ServiceEvent::Stop);
             0
         }
@@ -444,8 +450,8 @@ pub fn dispatch<T>(service_main: ServiceMainFn<T>, name: &str, argc: DWORD, argv
         )
     };
     unsafe { SERVICE_CONTROL_HANDLE = ctrl_handle };
-    set_service_status(ctrl_handle, SERVICE_START_PENDING, 0);
-    set_service_status(ctrl_handle, SERVICE_RUNNING, 0);
-    service_main(rx, _tx, args, false);
-    set_service_status(ctrl_handle, SERVICE_STOPPED, 0);
+    set_service_status(ctrl_handle, SERVICE_START_PENDING, 0, 0);
+    set_service_status(ctrl_handle, SERVICE_RUNNING, 0, 0);
+    let exit_code = service_main(rx, _tx, args, false);
+    set_service_status(ctrl_handle, SERVICE_STOPPED, 0, u32::from(exit_code));
 }

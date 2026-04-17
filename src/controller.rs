@@ -36,7 +36,7 @@ pub type ServiceMainFn<T> = fn(
     tx: mpsc::Sender<ServiceEvent<T>>,
     args: Vec<String>,
     standalone_mode: bool,
-) -> u32;
+) -> u8;
 
 /// Controllers implement this interface. They also need to implement the `register()` method; because the signature
 /// of service_main_wrapper depends on the system the method is not part of the interface.
