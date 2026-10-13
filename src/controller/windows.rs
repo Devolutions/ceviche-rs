@@ -3,7 +3,7 @@ use std::iter::once;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr;
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex, PoisonError};
 use std::{thread, time};
 
 use widestring::WideCString;
@@ -33,7 +33,10 @@ use crate::ServiceEvent;
 type DWORD = u32;
 type LPVOID = *mut c_void;
 
-static mut SERVICE_CONTROL_HANDLE: SERVICE_STATUS_HANDLE = 0;
+/// Wait hint reported with `SERVICE_START_PENDING`, in milliseconds.
+const START_PENDING_WAIT_HINT_MS: DWORD = 5_000;
+/// Wait hint reported with `SERVICE_STOP_PENDING`, in milliseconds.
+const STOP_PENDING_WAIT_HINT_MS: DWORD = 30_000;
 
 /// Exit code returned by the service main function, read by `register` once the dispatcher returns.
 static SERVICE_EXIT_CODE: AtomicU8 = AtomicU8::new(0);
@@ -308,19 +311,59 @@ impl WindowsController {
     }
 }
 
+/// Status handle of the running service and the checkpoint of its current pending state.
+struct ServiceStatusState {
+    handle: SERVICE_STATUS_HANDLE,
+    check_point: DWORD,
+    /// Set once `SERVICE_STOPPED` is reported; later status updates are dropped.
+    stopped: bool,
+}
+
+/// Context passed to `service_handler`.
+struct ServiceContext<T> {
+    tx: mpsc::Sender<ServiceEvent<T>>,
+    status: Mutex<ServiceStatusState>,
+}
+
+impl<T> ServiceContext<T> {
+    fn set_service_status(&self, current_state: DWORD, wait_hint: DWORD, service_exit_code: DWORD) {
+        let mut status = self.status.lock().unwrap_or_else(PoisonError::into_inner);
+        set_service_status(&mut status, current_state, wait_hint, service_exit_code);
+    }
+}
+
 fn set_service_status(
-    status_handle: SERVICE_STATUS_HANDLE,
+    status: &mut ServiceStatusState,
     current_state: DWORD,
     wait_hint: DWORD,
     service_exit_code: DWORD,
 ) {
+    // A control (e.g. STOP) may race with the service exiting on its own; never leave STOPPED.
+    if status.stopped {
+        return;
+    }
+    status.stopped = current_state == SERVICE_STOPPED;
+    // Pending states report an incrementing checkpoint, other states report 0 for both fields.
+    let (check_point, wait_hint) = match current_state {
+        SERVICE_START_PENDING
+        | SERVICE_STOP_PENDING
+        | SERVICE_PAUSE_PENDING
+        | SERVICE_CONTINUE_PENDING => {
+            status.check_point = status.check_point.wrapping_add(1).max(1);
+            (status.check_point, wait_hint)
+        }
+        _ => {
+            status.check_point = 0;
+            (0, 0)
+        }
+    };
     let (win32_exit_code, service_specific_exit_code) = if service_exit_code != 0 {
         (ERROR_SERVICE_SPECIFIC_ERROR, service_exit_code)
     } else {
         (0, 0)
     };
     let controls_accepted = match current_state {
-        SERVICE_START_PENDING | SERVICE_STOPPED => 0,
+        SERVICE_START_PENDING | SERVICE_STOP_PENDING | SERVICE_STOPPED => 0,
         _ => {
             SERVICE_ACCEPT_STOP
                 | SERVICE_ACCEPT_SHUTDOWN
@@ -334,11 +377,11 @@ fn set_service_status(
         dwControlsAccepted: controls_accepted,
         dwWin32ExitCode: win32_exit_code,
         dwServiceSpecificExitCode: service_specific_exit_code,
-        dwCheckPoint: 0,
+        dwCheckPoint: check_point,
         dwWaitHint: wait_hint,
     };
     unsafe {
-        SetServiceStatus(status_handle, &mut service_status);
+        SetServiceStatus(status.handle, &mut service_status);
     }
 }
 
@@ -348,20 +391,24 @@ unsafe extern "system" fn service_handler<T>(
     event_data: LPVOID,
     context: LPVOID,
 ) -> DWORD {
-    let tx = context as *mut mpsc::Sender<ServiceEvent<T>>;
+    // SAFETY: `context` is the `ServiceContext<T>` allocated by `dispatch`, which is never freed.
+    let context = &*(context as *const ServiceContext<T>);
+    let tx = &context.tx;
 
     match control {
         SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
-            set_service_status(SERVICE_CONTROL_HANDLE, SERVICE_STOP_PENDING, 10, 0);
-            let _ = (*tx).send(ServiceEvent::Stop);
+            // Reported once: the service main function has no way to report shutdown progress,
+            // and renewing the checkpoint on a timer would hide a hung shutdown from the SCM.
+            context.set_service_status(SERVICE_STOP_PENDING, STOP_PENDING_WAIT_HINT_MS, 0);
+            let _ = tx.send(ServiceEvent::Stop);
             0
         }
         SERVICE_CONTROL_PAUSE => {
-            let _ = (*tx).send(ServiceEvent::Pause);
+            let _ = tx.send(ServiceEvent::Pause);
             0
         }
         SERVICE_CONTROL_CONTINUE => {
-            let _ = (*tx).send(ServiceEvent::Continue);
+            let _ = tx.send(ServiceEvent::Continue);
             0
         }
         SERVICE_CONTROL_SESSIONCHANGE => {
@@ -371,28 +418,28 @@ unsafe extern "system" fn service_handler<T>(
             let session = Session::new(session_id);
 
             if event == WTS_CONSOLE_CONNECT {
-                let _ = (*tx).send(ServiceEvent::SessionConnect(session));
+                let _ = tx.send(ServiceEvent::SessionConnect(session));
                 0
             } else if event == WTS_CONSOLE_DISCONNECT {
-                let _ = (*tx).send(ServiceEvent::SessionDisconnect(session));
+                let _ = tx.send(ServiceEvent::SessionDisconnect(session));
                 0
             } else if event == WTS_REMOTE_CONNECT {
-                let _ = (*tx).send(ServiceEvent::SessionRemoteConnect(session));
+                let _ = tx.send(ServiceEvent::SessionRemoteConnect(session));
                 0
             } else if event == WTS_REMOTE_DISCONNECT {
-                let _ = (*tx).send(ServiceEvent::SessionRemoteDisconnect(session));
+                let _ = tx.send(ServiceEvent::SessionRemoteDisconnect(session));
                 0
             } else if event == WTS_SESSION_LOGON {
-                let _ = (*tx).send(ServiceEvent::SessionLogon(session));
+                let _ = tx.send(ServiceEvent::SessionLogon(session));
                 0
             } else if event == WTS_SESSION_LOGOFF {
-                let _ = (*tx).send(ServiceEvent::SessionLogoff(session));
+                let _ = tx.send(ServiceEvent::SessionLogoff(session));
                 0
             } else if event == WTS_SESSION_LOCK {
-                let _ = (*tx).send(ServiceEvent::SessionLock(session));
+                let _ = tx.send(ServiceEvent::SessionLock(session));
                 0
             } else if event == WTS_SESSION_UNLOCK {
-                let _ = (*tx).send(ServiceEvent::SessionUnlock(session));
+                let _ = tx.send(ServiceEvent::SessionUnlock(session));
                 0
             } else {
                 0
@@ -456,24 +503,53 @@ macro_rules! Service {
     };
 }
 
+// `T: Send` because the control handler sends events from the SCM dispatcher thread.
 #[doc(hidden)]
-pub fn dispatch<T>(service_main: ServiceMainFn<T>, name: &str, argc: DWORD, argv: *mut PWSTR) {
+pub fn dispatch<T: Send>(
+    service_main: ServiceMainFn<T>,
+    name: &str,
+    argc: DWORD,
+    argv: *mut PWSTR,
+) {
     let args = get_args(argc, argv);
     let service_name = get_utf16(name);
-    let (mut tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::channel();
     let _tx = tx.clone();
-    let ctrl_handle = unsafe {
-        RegisterServiceCtrlHandlerExW(
-            service_name.as_ptr(),
-            Some(service_handler::<T>),
-            &mut tx as *mut _ as LPVOID,
-        )
-    };
-    unsafe { SERVICE_CONTROL_HANDLE = ctrl_handle };
-    set_service_status(ctrl_handle, SERVICE_START_PENDING, 0, 0);
-    set_service_status(ctrl_handle, SERVICE_RUNNING, 0, 0);
+    // Leaked on purpose: the handler may be invoked by the dispatcher thread for as long as
+    // the service is registered, so the context must outlive this function.
+    let context_ptr = Box::into_raw(Box::new(ServiceContext {
+        tx,
+        status: Mutex::new(ServiceStatusState {
+            handle: 0,
+            check_point: 0,
+            stopped: false,
+        }),
+    }));
+    // SAFETY: `context_ptr` comes from `Box::into_raw` and is never freed.
+    let context = unsafe { &*context_ptr };
+    {
+        // Hold the lock until the handle is stored so the handler never observes an unset handle.
+        let mut status = context
+            .status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        status.handle = unsafe {
+            RegisterServiceCtrlHandlerExW(
+                service_name.as_ptr(),
+                Some(service_handler::<T>),
+                context_ptr as LPVOID,
+            )
+        };
+        set_service_status(
+            &mut status,
+            SERVICE_START_PENDING,
+            START_PENDING_WAIT_HINT_MS,
+            0,
+        );
+        set_service_status(&mut status, SERVICE_RUNNING, 0, 0);
+    }
     let exit_code = service_main(rx, _tx, args, false);
     // Store before reporting SERVICE_STOPPED: StartServiceCtrlDispatcherW may return right after.
     SERVICE_EXIT_CODE.store(exit_code, Ordering::Release);
-    set_service_status(ctrl_handle, SERVICE_STOPPED, 0, u32::from(exit_code));
+    context.set_service_status(SERVICE_STOPPED, 0, u32::from(exit_code));
 }
