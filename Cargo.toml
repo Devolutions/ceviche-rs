@@ -10,7 +10,9 @@ keywords = ["daemon", "service"]
 description = "Rust daemon/service wrapper"
 exclude = [
     ".*",
-    "appveyor.yml"
+    "appveyor.yml",
+    "cliff.toml",
+    "release-plz.toml"
 ]
 
 [dependencies]
