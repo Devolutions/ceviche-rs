@@ -278,15 +278,20 @@ impl WindowsController {
         unsafe {
             let mut service_name = get_utf16(self.service_name.as_str());
 
-            let service_table: &[*const SERVICE_TABLE_ENTRYW] = &[
-                &SERVICE_TABLE_ENTRYW {
+            // StartServiceCtrlDispatcherW requires the last table entry to have null members.
+            // Without it, the dispatcher reads past the table into unrelated stack memory.
+            let service_table = [
+                SERVICE_TABLE_ENTRYW {
                     lpServiceName: service_name.as_mut_ptr(),
                     lpServiceProc: Some(service_main_wrapper),
                 },
-                ptr::null(),
+                SERVICE_TABLE_ENTRYW {
+                    lpServiceName: ptr::null_mut(),
+                    lpServiceProc: None,
+                },
             ];
 
-            match StartServiceCtrlDispatcherW(*service_table.as_ptr()) {
+            match StartServiceCtrlDispatcherW(service_table.as_ptr()) {
                 0 => Err(Error::new("StartServiceCtrlDispatcher")),
                 _ => Ok(()),
             }
