@@ -13,7 +13,7 @@
 //!     rx: mpsc::Receiver<ServiceEvent<CustomServiceEvent>>,
 //!     _tx: mpsc::Sender<ServiceEvent<CustomServiceEvent>>,
 //!     args: Vec<String>,
-//!     standalone_mode: bool) -> u32 {
+//!     standalone_mode: bool) -> u8 {
 //!    loop {
 //!        if let Ok(control_code) = rx.recv() {
 //!            match control_code {
@@ -38,7 +38,7 @@
 //! static DISPLAY_NAME: &'static str = "FooBar Service";
 //! static DESCRIPTION: &'static str = "This is the FooBar service";
 //!
-//! fn main() {
+//! fn main() -> ExitCode {
 //!     let yaml = load_yaml!("cli.yml");
 //!     let app = App::from_yaml(yaml);
 //!     let matches = app.version(crate_version!()).get_matches();
@@ -46,24 +46,26 @@
 //!
 //!     let mut controller = Controller::new(SERVICE_NAME, DISPLAY_NAME, DESCRIPTION);
 //!
-//!     match cmd.as_str() {
+//!     let result = match cmd.as_str() {
 //!         "create" => controller.create(),
 //!         "delete" => controller.delete(),
 //!         "start" => controller.start(),
 //!         "stop" => controller.stop(),
 //!         "standalone" => {
 //!             let (tx, rx) = mpsc::channel();
+//!             let _tx = tx.clone();
 //!
 //!             ctrlc::set_handler(move || {
 //!                 let _ = tx.send(ServiceEvent::Stop);
 //!             }).expect("Failed to register Ctrl-C handler");
 //!
-//!             my_service_main(rx, vec![], true);
+//!             return ExitCode::from(my_service_main(rx, _tx, vec![], true));
 //!         }
-//!         _ => {
-//!             let _result = controller.register(service_main_wrapper);
-//!         }
-//!     }
+//!         // The exit code returned by the service main function is propagated to the OS.
+//!         _ => return controller.register(service_main_wrapper).map_or(ExitCode::FAILURE, ExitCode::from),
+//!     };
+//!
+//!     if result.is_ok() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 //! }
 //!
 //! ```
