@@ -35,7 +35,7 @@ impl DummyController {
         DummyController {}
     }
 
-    pub fn register(&mut self, _service_main_wrapper: fn()) -> Result<(), Error> {
+    pub fn register(&mut self, _service_main_wrapper: fn()) -> Result<u8, Error> {
         unimplemented!();
     }
 }

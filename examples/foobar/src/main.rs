@@ -3,6 +3,7 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 
+use std::process::ExitCode;
 use std::sync::mpsc;
 
 use ceviche::controller::*;
@@ -62,7 +63,7 @@ fn my_service_main(
     _tx: mpsc::Sender<ServiceEvent<CustomServiceEvent>>,
     args: Vec<String>,
     standalone_mode: bool,
-) -> u32 {
+) -> u8 {
     init_logging(standalone_mode);
     info!("foobar service started");
     info!("args: {:?}", args);
@@ -83,7 +84,7 @@ fn my_service_main(
 
 Service!("Foobar", my_service_main);
 
-fn main() {
+fn main() -> ExitCode {
     let yaml = load_yaml!("cli.yml");
     let app = App::from_yaml(yaml);
     let matches = app.version(crate_version!()).get_matches();
@@ -92,26 +93,10 @@ fn main() {
     let mut controller = Controller::new(SERVICE_NAME, DISPLAY_NAME, DESCRIPTION);
 
     match cmd.as_str() {
-        "create" => {
-            if let Err(e) = controller.create() {
-                println!("{}", e);
-            }
-        }
-        "delete" => {
-            if let Err(e) = controller.delete() {
-                println!("{}", e);
-            }
-        }
-        "start" => {
-            if let Err(e) = controller.start() {
-                println!("{}", e);
-            }
-        }
-        "stop" => {
-            if let Err(e) = controller.stop() {
-                println!("{}", e);
-            }
-        }
+        "create" => to_exit_code(controller.create()),
+        "delete" => to_exit_code(controller.delete()),
+        "start" => to_exit_code(controller.start()),
+        "stop" => to_exit_code(controller.stop()),
         "standalone" => {
             let (tx, rx) = mpsc::channel();
             let _tx = tx.clone();
@@ -120,10 +105,24 @@ fn main() {
                 let _ = tx.send(ServiceEvent::Stop);
             }).expect("Failed to register Ctrl-C handler");
 
-            my_service_main(rx, _tx, vec![], true);
+            ExitCode::from(my_service_main(rx, _tx, vec![], true))
         }
-        _ => {
-            let _result = controller.register(service_main_wrapper);
+        _ => match controller.register(service_main_wrapper) {
+            Ok(exit_code) => ExitCode::from(exit_code),
+            Err(e) => {
+                println!("{}", e);
+                ExitCode::FAILURE
+            }
+        },
+    }
+}
+
+fn to_exit_code(result: Result<(), ceviche::Error>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            println!("{}", e);
+            ExitCode::FAILURE
         }
     }
 }

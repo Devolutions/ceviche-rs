@@ -8,6 +8,7 @@ extern crate serde_json;
 extern crate base64;
 
 use std::env;
+use std::process::ExitCode;
 use std::sync::mpsc;
 
 use ceviche::controller::*;
@@ -67,7 +68,7 @@ fn cmdlet_service_main(
     _tx: mpsc::Sender<ServiceEvent<CustomServiceEvent>>,
     args: Vec<String>,
     standalone_mode: bool,
-) -> u32 {
+) -> u8 {
     let service = CmdletService::load().expect("unable to load service manifest");
     init_logging(&service, standalone_mode);
     info!("{} service started", service.get_service_name());
@@ -94,48 +95,49 @@ fn cmdlet_service_main(
 
 Service!("cmdlet", cmdlet_service_main);
 
-fn main() {
+fn main() -> ExitCode {
     let service = CmdletService::load().expect("unable to load cmdlet service");
     let mut controller = Controller::new(service.get_service_name(),
         service.get_display_name(), service.get_description());
 
     if let Some(cmd) = env::args().nth(1) {
         match cmd.as_str() {
-            "create" => {
-                if let Err(e) = controller.create() {
-                    println!("{}", e);
-                }
-            }
-            "delete" => {
-                if let Err(e) = controller.delete() {
-                    println!("{}", e);
-                }
-            }
-            "start" => {
-                if let Err(e) = controller.start() {
-                    println!("{}", e);
-                }
-            }
-            "stop" => {
-                if let Err(e) = controller.stop() {
-                    println!("{}", e);
-                }
-            }
+            "create" => to_exit_code(controller.create()),
+            "delete" => to_exit_code(controller.delete()),
+            "start" => to_exit_code(controller.start()),
+            "stop" => to_exit_code(controller.stop()),
             "run" => {
                 let (tx, rx) = mpsc::channel();
                 let _tx = tx.clone();
-        
+
                 ctrlc::set_handler(move || {
                     let _ = tx.send(ServiceEvent::Stop);
                 }).expect("Failed to register Ctrl-C handler");
-        
-                cmdlet_service_main(rx, _tx, vec![], true);
+
+                ExitCode::from(cmdlet_service_main(rx, _tx, vec![], true))
             }
             _ => {
                 println!("invalid command: {}", cmd);
+                ExitCode::FAILURE
             }
         }
     } else {
-        let _result = controller.register(service_main_wrapper);
+        match controller.register(service_main_wrapper) {
+            Ok(exit_code) => ExitCode::from(exit_code),
+            Err(e) => {
+                println!("{}", e);
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
+
+fn to_exit_code(result: Result<(), ceviche::Error>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            println!("{}", e);
+            ExitCode::FAILURE
+        }
     }
 }

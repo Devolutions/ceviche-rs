@@ -31,12 +31,17 @@ cfg_if! {
 /// `rx` receives the events that are sent to the service. `tx` can be used to send custom events on the channel.
 /// `args` is the list or arguments that were passed to the service. When `standalone_mode` is true, the service
 /// main function is being called directly (outside of the system service support).
+///
+/// The return value is the exit code of the service: 0 means success, 1-255 means failure.
+/// On Linux and macOS, it is returned by `Controller::register` and the caller is responsible for
+/// propagating it to the OS. On Windows, it is reported to the SCM (as `ERROR_SERVICE_SPECIFIC_ERROR`
+/// with the exit code as the service-specific exit code when non-zero) and also returned by `Controller::register`.
 pub type ServiceMainFn<T> = fn(
     rx: mpsc::Receiver<ServiceEvent<T>>,
     tx: mpsc::Sender<ServiceEvent<T>>,
     args: Vec<String>,
     standalone_mode: bool,
-) -> u32;
+) -> u8;
 
 /// Controllers implement this interface. They also need to implement the `register()` method; because the signature
 /// of service_main_wrapper depends on the system the method is not part of the interface.
